@@ -1,0 +1,16 @@
+[package]
+name = "the-synth"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cpal = "0.15"
+midir = "0.9"
+ratatui = "0.26"
+crossterm = "0.27"
+crossbeam-channel = "0.5"
+thiserror = "1.0"
+anyhow = "1.0"
+
+[profile.dev]
+opt-level = 1  # Some optimization for audio in dev mode
