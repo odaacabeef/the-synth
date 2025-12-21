@@ -1,4 +1,5 @@
 use crate::types::waveform::Waveform;
+use std::collections::VecDeque;
 use std::sync::{atomic::Ordering, Arc};
 use crate::audio::parameters::SynthParameters;
 
@@ -34,6 +35,10 @@ pub struct App {
     pub selected_param: Parameter,
     /// Number of active voices (updated from audio thread)
     pub active_voices: usize,
+    /// Waveform samples for oscilloscope visualization (rolling 500ms buffer)
+    pub waveform_samples: VecDeque<f32>,
+    /// Maximum samples to keep (500ms at 44.1kHz)
+    pub max_samples: usize,
     /// Whether to quit the application
     pub should_quit: bool,
     /// Reference to shared parameters
@@ -53,6 +58,9 @@ pub enum Parameter {
 impl App {
     /// Create new app with default values and MIDI device list
     pub fn new(parameters: Arc<SynthParameters>, midi_devices: Vec<String>) -> Self {
+        const SAMPLE_RATE: usize = 44100;
+        let max_samples = SAMPLE_RATE / 2; // 500ms at 44.1kHz (22,050 samples)
+
         Self {
             mode: AppMode::DeviceSelection,
             midi_devices,
@@ -65,6 +73,8 @@ impl App {
             midi_channel: None, // Omni mode by default
             selected_param: Parameter::Attack,
             active_voices: 0,
+            waveform_samples: VecDeque::with_capacity(max_samples),
+            max_samples,
             should_quit: false,
             parameters,
         }

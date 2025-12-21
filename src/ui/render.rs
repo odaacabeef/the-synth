@@ -91,6 +91,7 @@ fn render_synthesizer(frame: &mut Frame, app: &App) {
             Constraint::Length(7),  // ADSR controls
             Constraint::Length(5),  // Waveform
             Constraint::Length(4),  // Channel selector
+            Constraint::Length(15), // Oscilloscope (13 lines + 2 borders)
             Constraint::Length(3),  // Voice meter
             Constraint::Length(4),  // Help text (fixed height)
         ])
@@ -100,8 +101,9 @@ fn render_synthesizer(frame: &mut Frame, app: &App) {
     render_adsr_controls(frame, chunks[1], app);
     render_waveform_selector(frame, chunks[2], app);
     render_channel_selector(frame, chunks[3], app);
-    render_voice_meter(frame, chunks[4], app);
-    render_help(frame, chunks[5]);
+    render_oscilloscope(frame, chunks[4], app);
+    render_voice_meter(frame, chunks[5], app);
+    render_help(frame, chunks[6]);
 }
 
 /// Render title bar
@@ -242,6 +244,71 @@ fn render_voice_meter(frame: &mut Frame, area: Rect, app: &App) {
         .ratio(ratio);
 
     frame.render_widget(gauge, area);
+}
+
+/// Render oscilloscope waveform visualization
+/// 13 lines: Line 7 = 0V, Lines 1-6 = positive, Lines 8-13 = negative
+fn render_oscilloscope(frame: &mut Frame, area: Rect, app: &App) {
+    let block = Block::default()
+        .title("Oscilloscope")
+        .borders(Borders::ALL);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    if app.waveform_samples.is_empty() {
+        return;
+    }
+
+    let width = inner.width as usize;
+    const HEIGHT: usize = 13; // Fixed 13 lines
+
+    if width == 0 {
+        return;
+    }
+
+    // Create a 2D grid for the waveform (13 lines)
+    let mut grid = vec![vec![' '; width]; HEIGHT];
+
+    // Downsample audio samples to fit width
+    let step = if app.waveform_samples.len() >= width {
+        app.waveform_samples.len() as f32 / width as f32
+    } else {
+        1.0
+    };
+
+    let sample_count = width.min(app.waveform_samples.len());
+
+    // Plot waveform using dots
+    for x in 0..sample_count {
+        let sample_idx = (x as f32 * step) as usize;
+
+        if sample_idx >= app.waveform_samples.len() {
+            break;
+        }
+
+        let sample = app.waveform_samples[sample_idx];
+
+        // Map sample from -1.0..1.0 to line 0..12 (inverted for display)
+        // +1.0 (max positive) -> line 0
+        // 0.0 (zero) -> line 6 (middle)
+        // -1.0 (max negative) -> line 12
+        let line = ((1.0 - sample) * 6.0).clamp(0.0, 12.0).round() as usize;
+
+        // Plot dot
+        grid[line][x] = '.';
+    }
+
+    // Convert grid to lines for rendering
+    let lines: Vec<Line> = grid
+        .iter()
+        .map(|row| {
+            let text: String = row.iter().collect();
+            Line::from(Span::styled(text, Style::default().fg(Color::Green)))
+        })
+        .collect();
+
+    let paragraph = Paragraph::new(lines);
+    frame.render_widget(paragraph, inner);
 }
 
 /// Render help text

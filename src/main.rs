@@ -68,6 +68,7 @@ fn main() -> Result<()> {
     // Create event channels
     let (event_tx, event_rx) = crossbeam_channel::unbounded();
     let (voice_tx, voice_rx) = crossbeam_channel::unbounded();
+    let (waveform_tx, waveform_rx) = crossbeam_channel::unbounded();
 
     // Connect to selected MIDI device
     let _midi_handler = MidiHandler::new_with_device(event_tx, selected_device_index, parameters.clone())?;
@@ -83,19 +84,19 @@ fn main() -> Result<()> {
     // Start audio stream
     let _stream = match config.sample_format() {
         cpal::SampleFormat::F32 => {
-            start_audio_stream::<f32>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
+            start_audio_stream::<f32>(&device, &config.into(), parameters.clone(), event_rx, voice_tx, waveform_tx)?
         }
         cpal::SampleFormat::I16 => {
-            start_audio_stream::<i16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
+            start_audio_stream::<i16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx, waveform_tx)?
         }
         cpal::SampleFormat::U16 => {
-            start_audio_stream::<u16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
+            start_audio_stream::<u16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx, waveform_tx)?
         }
         _ => panic!("Unsupported sample format"),
     };
 
     // Run synthesizer UI loop
-    let result = run_ui_loop(&mut terminal, &mut app, voice_rx);
+    let result = run_ui_loop(&mut terminal, &mut app, voice_rx, waveform_rx);
 
     // Restore terminal
     disable_raw_mode()?;
@@ -111,6 +112,7 @@ fn start_audio_stream<T>(
     parameters: Arc<SynthParameters>,
     event_rx: crossbeam_channel::Receiver<types::events::SynthEvent>,
     voice_tx: crossbeam_channel::Sender<usize>,
+    waveform_tx: crossbeam_channel::Sender<Vec<f32>>,
 ) -> Result<cpal::Stream>
 where
     T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>,
@@ -148,10 +150,16 @@ where
                 }
             }
 
-            // Periodically send voice count to UI (every ~100ms at 44.1kHz)
+            // Periodically send voice count and waveform samples to UI (every ~100ms at 44.1kHz)
             frame_counter += frames as u64;
             if frame_counter > 4410 {
                 let _ = voice_tx.try_send(engine.active_voice_count());
+
+                // Capture up to 2048 samples for oscilloscope visualization (~46ms at 44.1kHz)
+                let sample_count = frames.min(2048);
+                let samples: Vec<f32> = temp_buffer[..sample_count].to_vec();
+                let _ = waveform_tx.try_send(samples);
+
                 frame_counter = 0;
             }
         },
@@ -169,11 +177,23 @@ fn run_ui_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut App,
     voice_rx: crossbeam_channel::Receiver<usize>,
+    waveform_rx: crossbeam_channel::Receiver<Vec<f32>>,
 ) -> Result<()> {
     loop {
         // Update voice count from audio thread
         while let Ok(count) = voice_rx.try_recv() {
             app.active_voices = count;
+        }
+
+        // Update waveform samples from audio thread (accumulate in rolling buffer)
+        while let Ok(samples) = waveform_rx.try_recv() {
+            // Append new samples to rolling buffer
+            app.waveform_samples.extend(samples);
+
+            // Trim to keep only the last 500ms
+            while app.waveform_samples.len() > app.max_samples {
+                app.waveform_samples.pop_front();
+            }
         }
 
         // Render UI
