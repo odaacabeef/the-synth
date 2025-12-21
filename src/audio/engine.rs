@@ -26,6 +26,11 @@ impl SynthEngine {
         }
     }
 
+    /// Get active voice count
+    pub fn active_voice_count(&self) -> usize {
+        self.voice_pool.active_voice_count()
+    }
+
     /// Process audio callback - fills output buffer with samples
     /// This runs in real-time audio thread - must be fast and lock-free
     pub fn process(&mut self, output: &mut [f32]) {

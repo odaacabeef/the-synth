@@ -1,23 +1,33 @@
 mod audio;
 mod midi;
 mod types;
+mod ui;
 
 use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use std::sync::Arc;
+use crossterm::{
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::{backend::CrosstermBackend, Terminal};
+use std::{
+    io,
+    sync::Arc,
+    time::Duration,
+};
 
 use audio::{engine::SynthEngine, parameters::SynthParameters};
 use midi::handler::MidiHandler;
+use ui::{app::App, events, render};
 
 fn main() -> Result<()> {
-    println!("The Synth - Phase 4: Polyphony");
-    println!("===============================");
-
     // Create event channel for MIDI → Audio communication
     let (event_tx, event_rx) = crossbeam_channel::bounded(256);
 
-    // Initialize MIDI input
-    println!("Initializing MIDI...");
+    // Create channel for Audio → UI communication (voice count updates)
+    let (voice_tx, voice_rx) = crossbeam_channel::unbounded();
+
+    // Initialize MIDI input (suppress output for TUI)
     let _midi_handler = MidiHandler::new(event_tx)?;
 
     // Initialize audio host
@@ -26,50 +36,50 @@ fn main() -> Result<()> {
         .default_output_device()
         .expect("No output device available");
 
-    println!("\nOutput device: {}", device.name()?);
-
     let config = device.default_output_config()?;
-    println!("Default output config: {:?}", config);
 
     // Create shared parameters
     let parameters = Arc::new(SynthParameters::new());
 
-    // Build audio stream based on sample format
-    match config.sample_format() {
-        cpal::SampleFormat::F32 => run::<f32>(&device, &config.into(), parameters, event_rx)?,
-        cpal::SampleFormat::I16 => run::<i16>(&device, &config.into(), parameters, event_rx)?,
-        cpal::SampleFormat::U16 => run::<u16>(&device, &config.into(), parameters, event_rx)?,
+    // Build and start audio stream based on sample format
+    let _stream = match config.sample_format() {
+        cpal::SampleFormat::F32 => {
+            start_audio_stream::<f32>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
+        }
+        cpal::SampleFormat::I16 => {
+            start_audio_stream::<i16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
+        }
+        cpal::SampleFormat::U16 => {
+            start_audio_stream::<u16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
+        }
         _ => panic!("Unsupported sample format"),
-    }
+    };
+
+    // Run TUI
+    run_tui(parameters, voice_rx)?;
 
     Ok(())
 }
 
-fn run<T>(
+fn start_audio_stream<T>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
     parameters: Arc<SynthParameters>,
     event_rx: crossbeam_channel::Receiver<types::events::SynthEvent>,
-) -> Result<()>
+    voice_tx: crossbeam_channel::Sender<usize>,
+) -> Result<cpal::Stream>
 where
     T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>,
 {
     let sample_rate = config.sample_rate.0 as f32;
     let channels = config.channels as usize;
 
-    println!("\nSample rate: {} Hz", sample_rate);
-    println!("Channels: {}", channels);
-    println!("\n8-Voice Polyphonic Synthesizer Ready!");
-    println!("Play chords on your MIDI keyboard - up to 8 simultaneous notes");
-    println!("ADSR: Attack=10ms, Decay=100ms, Sustain=70%, Release=300ms");
-    println!("Voice stealing: Idle > Releasing > Oldest");
-    println!("Press Ctrl+C to stop\n");
-
     // Create synth engine with MIDI event receiver
     let mut engine = SynthEngine::new(sample_rate, parameters, event_rx);
 
     // Pre-allocate buffer for processing
     let mut temp_buffer = vec![0.0f32; 512];
+    let mut frame_counter = 0u64;
 
     // Build output stream
     let stream = device.build_output_stream(
@@ -93,6 +103,13 @@ where
                     *channel_sample = T::from_sample(sample);
                 }
             }
+
+            // Periodically send voice count to UI (every ~100ms at 44.1kHz)
+            frame_counter += frames as u64;
+            if frame_counter > 4410 {
+                let _ = voice_tx.try_send(engine.active_voice_count());
+                frame_counter = 0;
+            }
         },
         |err| eprintln!("Audio stream error: {}", err),
         None,
@@ -101,8 +118,59 @@ where
     // Start audio stream
     stream.play()?;
 
-    // Keep running until interrupted
-    std::thread::park();
+    Ok(stream)
+}
+
+fn run_tui(
+    parameters: Arc<SynthParameters>,
+    voice_rx: crossbeam_channel::Receiver<usize>,
+) -> Result<()> {
+    // Setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Create app
+    let mut app = App::new(parameters);
+
+    // Run UI loop
+    let result = run_ui_loop(&mut terminal, &mut app, voice_rx);
+
+    // Restore terminal
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    terminal.show_cursor()?;
+
+    result
+}
+
+fn run_ui_loop(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    app: &mut App,
+    voice_rx: crossbeam_channel::Receiver<usize>,
+) -> Result<()> {
+    loop {
+        // Update voice count from audio thread
+        while let Ok(count) = voice_rx.try_recv() {
+            app.active_voices = count;
+        }
+
+        // Render UI
+        terminal.draw(|f| render::render(f, app))?;
+
+        // Handle events
+        events::handle_events(app)?;
+
+        // Check if should quit
+        if app.should_quit {
+            break;
+        }
+
+        // Small sleep to reduce CPU usage
+        std::thread::sleep(Duration::from_millis(16)); // ~60 FPS
+    }
 
     Ok(())
 }
