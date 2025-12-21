@@ -13,6 +13,7 @@ impl VCA {
     }
 
     /// Set master gain level
+    #[allow(dead_code)]
     pub fn set_gain(&mut self, gain: f32) {
         self.gain = gain.clamp(0.0, 1.0);
     }

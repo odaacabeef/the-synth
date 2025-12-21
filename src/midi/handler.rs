@@ -81,6 +81,7 @@ impl MidiHandler {
     }
 
     /// List all available MIDI input devices
+    #[allow(dead_code)]
     pub fn list_devices() -> Result<Vec<String>> {
         let midi_in = MidiInput::new("the-synth-list")?;
         let ports = midi_in.ports();

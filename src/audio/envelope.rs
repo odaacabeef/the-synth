@@ -138,6 +138,7 @@ impl Envelope {
     }
 
     /// Reset envelope to idle state
+    #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.state = EnvelopeState::Idle;
         self.current_level = 0.0;

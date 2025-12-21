@@ -42,6 +42,7 @@ impl Voice {
     }
 
     /// Set VCA gain
+    #[allow(dead_code)]
     pub fn set_gain(&mut self, gain: f32) {
         self.vca.set_gain(gain);
     }
@@ -65,6 +66,7 @@ impl Voice {
     }
 
     /// Reset voice to idle state
+    #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.envelope.reset();
         self.oscillator.reset();
