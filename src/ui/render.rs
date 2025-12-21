@@ -108,7 +108,7 @@ fn render_synthesizer(frame: &mut Frame, app: &App) {
 
 /// Render title bar
 fn render_title(frame: &mut Frame, area: Rect) {
-    let title = Paragraph::new("The Synth - 8-Voice Polyphonic Synthesizer")
+    let title = Paragraph::new("The Synth - 16-Voice Polyphonic Synthesizer")
         .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
@@ -234,8 +234,8 @@ fn render_channel_selector(frame: &mut Frame, area: Rect, app: &App) {
 
 /// Render voice activity meter
 fn render_voice_meter(frame: &mut Frame, area: Rect, app: &App) {
-    let ratio = app.active_voices as f64 / 8.0;
-    let label = format!("Active Voices: {}/8", app.active_voices);
+    let ratio = app.active_voices as f64 / 16.0;
+    let label = format!("Active Voices: {}/16", app.active_voices);
 
     let gauge = Gauge::default()
         .block(Block::default().title("Polyphony").borders(Borders::ALL))

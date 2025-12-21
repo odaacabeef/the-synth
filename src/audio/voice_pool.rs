@@ -1,7 +1,7 @@
 use super::voice::Voice;
 
 /// Number of simultaneous voices supported
-pub const MAX_VOICES: usize = 8;
+pub const MAX_VOICES: usize = 16;
 
 /// Voice state for tracking and allocation
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -52,6 +52,14 @@ impl VoicePool {
     pub fn new(sample_rate: f32) -> Self {
         Self {
             voices: [
+                PoolVoice::new(sample_rate),
+                PoolVoice::new(sample_rate),
+                PoolVoice::new(sample_rate),
+                PoolVoice::new(sample_rate),
+                PoolVoice::new(sample_rate),
+                PoolVoice::new(sample_rate),
+                PoolVoice::new(sample_rate),
+                PoolVoice::new(sample_rate),
                 PoolVoice::new(sample_rate),
                 PoolVoice::new(sample_rate),
                 PoolVoice::new(sample_rate),
