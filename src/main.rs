@@ -10,8 +10,8 @@ use audio::{engine::SynthEngine, parameters::SynthParameters};
 use midi::handler::MidiHandler;
 
 fn main() -> Result<()> {
-    println!("The Synth - Phase 3: MIDI Control");
-    println!("==================================");
+    println!("The Synth - Phase 4: Polyphony");
+    println!("===============================");
 
     // Create event channel for MIDI → Audio communication
     let (event_tx, event_rx) = crossbeam_channel::bounded(256);
@@ -59,8 +59,10 @@ where
 
     println!("\nSample rate: {} Hz", sample_rate);
     println!("Channels: {}", channels);
-    println!("\nSynthesizer ready! Play notes on your MIDI keyboard.");
+    println!("\n8-Voice Polyphonic Synthesizer Ready!");
+    println!("Play chords on your MIDI keyboard - up to 8 simultaneous notes");
     println!("ADSR: Attack=10ms, Decay=100ms, Sustain=70%, Release=300ms");
+    println!("Voice stealing: Idle > Releasing > Oldest");
     println!("Press Ctrl+C to stop\n");
 
     // Create synth engine with MIDI event receiver
