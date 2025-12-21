@@ -58,6 +58,11 @@ impl SynthEngine {
         let release = self.parameters.release.load(Ordering::Relaxed);
         self.voice_pool.set_adsr(attack, decay, sustain, release);
 
+        // Read waveform parameter
+        let waveform_u8 = self.parameters.waveform.load(Ordering::Relaxed);
+        let waveform = crate::types::waveform::Waveform::from_u8(waveform_u8);
+        self.voice_pool.set_waveform(waveform);
+
         // Process all voices and mix to output
         self.voice_pool.process(output);
     }

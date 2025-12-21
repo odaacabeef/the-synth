@@ -22,7 +22,7 @@ pub struct App {
     /// Whether to quit the application
     pub should_quit: bool,
     /// Reference to shared parameters
-    parameters: Arc<SynthParameters>,
+    pub parameters: Arc<SynthParameters>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,6 +98,7 @@ impl App {
                     Waveform::Sawtooth => Waveform::Square,
                     Waveform::Square => Waveform::Sine,
                 };
+                self.sync_to_audio();
             }
         }
     }
@@ -128,6 +129,7 @@ impl App {
                     Waveform::Sawtooth => Waveform::Triangle,
                     Waveform::Square => Waveform::Sawtooth,
                 };
+                self.sync_to_audio();
             }
         }
     }
@@ -138,6 +140,7 @@ impl App {
         self.parameters.decay.store(self.decay, Ordering::Relaxed);
         self.parameters.sustain.store(self.sustain, Ordering::Relaxed);
         self.parameters.release.store(self.release, Ordering::Relaxed);
+        self.parameters.waveform.store(self.waveform.to_u8(), Ordering::Relaxed);
     }
 
     /// Mark app for quit

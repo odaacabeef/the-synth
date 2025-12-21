@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 
 /// Thread-safe parameter storage using atomic operations
 /// Allows real-time audio thread to read parameters without blocking
@@ -13,6 +13,8 @@ pub struct SynthParameters {
     pub sustain: AtomicF32,
     /// ADSR Release time in seconds
     pub release: AtomicF32,
+    /// Waveform type (0=Sine, 1=Triangle, 2=Sawtooth, 3=Square)
+    pub waveform: AtomicU8,
 }
 
 impl SynthParameters {
@@ -23,6 +25,7 @@ impl SynthParameters {
             decay: AtomicF32::new(0.1),       // 100ms
             sustain: AtomicF32::new(0.7),     // 70%
             release: AtomicF32::new(0.3),     // 300ms
+            waveform: AtomicU8::new(0),       // Sine
         }
     }
 }

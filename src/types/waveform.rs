@@ -14,6 +14,26 @@ impl Default for Waveform {
 }
 
 impl Waveform {
+    /// Convert to u8 for atomic storage
+    pub fn to_u8(self) -> u8 {
+        match self {
+            Waveform::Sine => 0,
+            Waveform::Triangle => 1,
+            Waveform::Sawtooth => 2,
+            Waveform::Square => 3,
+        }
+    }
+
+    /// Convert from u8 from atomic storage
+    pub fn from_u8(value: u8) -> Self {
+        match value {
+            1 => Waveform::Triangle,
+            2 => Waveform::Sawtooth,
+            3 => Waveform::Square,
+            _ => Waveform::Sine, // Default to Sine for invalid values
+        }
+    }
+
     /// Generate sample for this waveform at given phase (0.0 to 1.0)
     pub fn generate(&self, phase: f32) -> f32 {
         use std::f32::consts::PI;

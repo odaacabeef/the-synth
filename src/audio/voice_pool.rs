@@ -130,6 +130,13 @@ impl VoicePool {
         }
     }
 
+    /// Set waveform for all voices
+    pub fn set_waveform(&mut self, waveform: crate::types::waveform::Waveform) {
+        for pool_voice in &mut self.voices {
+            pool_voice.voice.set_waveform(waveform);
+        }
+    }
+
     /// Process all voices and mix to output buffer
     pub fn process(&mut self, output: &mut [f32]) {
         // Update voice states first
