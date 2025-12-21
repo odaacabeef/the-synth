@@ -1,4 +1,5 @@
 mod audio;
+mod midi;
 mod types;
 
 use anyhow::Result;
@@ -6,10 +7,18 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::Arc;
 
 use audio::{engine::SynthEngine, parameters::SynthParameters};
+use midi::handler::MidiHandler;
 
 fn main() -> Result<()> {
-    println!("The Synth - Phase 2: Complete DSP Chain");
-    println!("========================================");
+    println!("The Synth - Phase 3: MIDI Control");
+    println!("==================================");
+
+    // Create event channel for MIDI → Audio communication
+    let (event_tx, event_rx) = crossbeam_channel::bounded(256);
+
+    // Initialize MIDI input
+    println!("Initializing MIDI...");
+    let _midi_handler = MidiHandler::new(event_tx)?;
 
     // Initialize audio host
     let host = cpal::default_host();
@@ -17,7 +26,7 @@ fn main() -> Result<()> {
         .default_output_device()
         .expect("No output device available");
 
-    println!("Output device: {}", device.name()?);
+    println!("\nOutput device: {}", device.name()?);
 
     let config = device.default_output_config()?;
     println!("Default output config: {:?}", config);
@@ -27,9 +36,9 @@ fn main() -> Result<()> {
 
     // Build audio stream based on sample format
     match config.sample_format() {
-        cpal::SampleFormat::F32 => run::<f32>(&device, &config.into(), parameters)?,
-        cpal::SampleFormat::I16 => run::<i16>(&device, &config.into(), parameters)?,
-        cpal::SampleFormat::U16 => run::<u16>(&device, &config.into(), parameters)?,
+        cpal::SampleFormat::F32 => run::<f32>(&device, &config.into(), parameters, event_rx)?,
+        cpal::SampleFormat::I16 => run::<i16>(&device, &config.into(), parameters, event_rx)?,
+        cpal::SampleFormat::U16 => run::<u16>(&device, &config.into(), parameters, event_rx)?,
         _ => panic!("Unsupported sample format"),
     }
 
@@ -40,6 +49,7 @@ fn run<T>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
     parameters: Arc<SynthParameters>,
+    event_rx: crossbeam_channel::Receiver<types::events::SynthEvent>,
 ) -> Result<()>
 where
     T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>,
@@ -47,15 +57,14 @@ where
     let sample_rate = config.sample_rate.0 as f32;
     let channels = config.channels as usize;
 
-    println!("Sample rate: {} Hz", sample_rate);
+    println!("\nSample rate: {} Hz", sample_rate);
     println!("Channels: {}", channels);
-    println!("\nPlaying 440Hz note with ADSR envelope...");
-    println!("Note will trigger at start, release after 0.5s");
+    println!("\nSynthesizer ready! Play notes on your MIDI keyboard.");
     println!("ADSR: Attack=10ms, Decay=100ms, Sustain=70%, Release=300ms");
     println!("Press Ctrl+C to stop\n");
 
-    // Create synth engine
-    let mut engine = SynthEngine::new(sample_rate, parameters);
+    // Create synth engine with MIDI event receiver
+    let mut engine = SynthEngine::new(sample_rate, parameters, event_rx);
 
     // Pre-allocate buffer for processing
     let mut temp_buffer = vec![0.0f32; 512];
