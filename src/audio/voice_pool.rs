@@ -137,6 +137,15 @@ impl VoicePool {
         }
     }
 
+    /// Release all active voices (MIDI panic)
+    pub fn all_notes_off(&mut self) {
+        for pool_voice in &mut self.voices {
+            if pool_voice.is_active() {
+                pool_voice.voice.note_off();
+            }
+        }
+    }
+
     /// Process all voices and mix to output buffer
     pub fn process(&mut self, output: &mut [f32]) {
         // Update voice states first

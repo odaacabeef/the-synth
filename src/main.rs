@@ -22,7 +22,8 @@ use ui::{app::App, events, render};
 
 fn main() -> Result<()> {
     // Create event channel for MIDI → Audio communication
-    let (event_tx, event_rx) = crossbeam_channel::bounded(256);
+    // Use unbounded to ensure Note Off messages are never dropped
+    let (event_tx, event_rx) = crossbeam_channel::unbounded();
 
     // Create channel for Audio → UI communication (voice count updates)
     let (voice_tx, voice_rx) = crossbeam_channel::unbounded();

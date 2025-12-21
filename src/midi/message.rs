@@ -5,6 +5,7 @@ use crate::types::{events::SynthEvent, note::{midi_note_to_frequency, midi_veloc
 pub enum MidiMessage {
     NoteOn { channel: u8, note: u8, velocity: u8 },
     NoteOff { channel: u8, note: u8, velocity: u8 },
+    ControlChange { channel: u8, controller: u8, value: u8 },
     Unknown,
 }
 
@@ -57,6 +58,18 @@ impl MidiMessage {
                     MidiMessage::Unknown
                 }
             }
+            0xB0 => {
+                // Control Change
+                if bytes.len() >= 3 {
+                    MidiMessage::ControlChange {
+                        channel,
+                        controller: bytes[1],
+                        value: bytes[2],
+                    }
+                } else {
+                    MidiMessage::Unknown
+                }
+            }
             _ => MidiMessage::Unknown,
         }
     }
@@ -70,6 +83,14 @@ impl MidiMessage {
                 Some(SynthEvent::note_on(frequency, amplitude))
             }
             MidiMessage::NoteOff { note, .. } => Some(SynthEvent::note_off(*note)),
+            MidiMessage::ControlChange { controller, .. } => {
+                // CC 123 = All Notes Off (MIDI panic)
+                if *controller == 123 {
+                    Some(SynthEvent::all_notes_off())
+                } else {
+                    None
+                }
+            }
             MidiMessage::Unknown => None,
         }
     }

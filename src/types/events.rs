@@ -6,6 +6,8 @@ pub enum SynthEvent {
     NoteOn { frequency: f32, velocity: f32 },
     /// Note off event with note number
     NoteOff { note: u8 },
+    /// All notes off (MIDI panic)
+    AllNotesOff,
 }
 
 impl SynthEvent {
@@ -17,5 +19,10 @@ impl SynthEvent {
     /// Create a note off event
     pub fn note_off(note: u8) -> Self {
         SynthEvent::NoteOff { note }
+    }
+
+    /// Create an all notes off event
+    pub fn all_notes_off() -> Self {
+        SynthEvent::AllNotesOff
     }
 }

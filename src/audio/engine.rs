@@ -48,6 +48,10 @@ impl SynthEngine {
                     // Release the matching voice
                     self.voice_pool.note_off(note);
                 }
+                SynthEvent::AllNotesOff => {
+                    // MIDI panic - release all voices
+                    self.voice_pool.all_notes_off();
+                }
             }
         }
 
