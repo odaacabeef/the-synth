@@ -90,6 +90,7 @@ fn render_synthesizer(frame: &mut Frame, app: &App) {
             Constraint::Length(3),  // Title
             Constraint::Length(7),  // ADSR controls
             Constraint::Length(5),  // Waveform
+            Constraint::Length(4),  // Channel selector
             Constraint::Length(3),  // Voice meter
             Constraint::Length(4),  // Help text (fixed height)
         ])
@@ -98,8 +99,9 @@ fn render_synthesizer(frame: &mut Frame, app: &App) {
     render_title(frame, chunks[0]);
     render_adsr_controls(frame, chunks[1], app);
     render_waveform_selector(frame, chunks[2], app);
-    render_voice_meter(frame, chunks[3], app);
-    render_help(frame, chunks[4]);
+    render_channel_selector(frame, chunks[3], app);
+    render_voice_meter(frame, chunks[4], app);
+    render_help(frame, chunks[5]);
 }
 
 /// Render title bar
@@ -196,6 +198,33 @@ fn render_waveform_selector(frame: &mut Frame, area: Rect, app: &App) {
 
     let paragraph = Paragraph::new(waveforms)
         .block(Block::default().title("Waveform").borders(Borders::ALL))
+        .alignment(Alignment::Center);
+
+    frame.render_widget(paragraph, area);
+}
+
+/// Render MIDI channel selector
+fn render_channel_selector(frame: &mut Frame, area: Rect, app: &App) {
+    let selected = app.selected_param == Parameter::Channel;
+    let color = if selected { Color::Yellow } else { Color::White };
+
+    let channel_text = match app.midi_channel {
+        None => "MIDI Channel: Omni (All)".to_string(),
+        Some(ch) => format!("MIDI Channel: {}", ch + 1), // Display as 1-16
+    };
+
+    let style = if selected {
+        Style::default().fg(color).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(color)
+    };
+
+    let lines = vec![
+        Line::from(Span::styled(channel_text, style)),
+    ];
+
+    let paragraph = Paragraph::new(lines)
+        .block(Block::default().title("MIDI Channel").borders(Borders::ALL))
         .alignment(Alignment::Center);
 
     frame.render_widget(paragraph, area);

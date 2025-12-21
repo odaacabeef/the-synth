@@ -1,8 +1,10 @@
 use anyhow::{anyhow, Result};
 use crossbeam_channel::Sender;
 use midir::{MidiInput, MidiInputConnection};
+use std::sync::{atomic::Ordering, Arc};
 
 use super::message::MidiMessage;
+use crate::audio::parameters::SynthParameters;
 use crate::types::events::SynthEvent;
 
 /// MIDI input handler
@@ -13,7 +15,11 @@ pub struct MidiHandler {
 
 impl MidiHandler {
     /// Connect to a specific MIDI input device by index
-    pub fn new_with_device(event_tx: Sender<SynthEvent>, device_index: usize) -> Result<Self> {
+    pub fn new_with_device(
+        event_tx: Sender<SynthEvent>,
+        device_index: usize,
+        parameters: Arc<SynthParameters>,
+    ) -> Result<Self> {
         let midi_in = MidiInput::new("the-synth-input")?;
         let ports = midi_in.ports();
 
@@ -32,8 +38,11 @@ impl MidiHandler {
                     // Parse MIDI message
                     let message = MidiMessage::parse(bytes);
 
-                    // Convert to synth event and send
-                    if let Some(event) = message.to_synth_event() {
+                    // Read channel filter from parameters
+                    let channel_filter = parameters.midi_channel.load(Ordering::Relaxed);
+
+                    // Convert to synth event with channel filtering
+                    if let Some(event) = message.to_synth_event(channel_filter) {
                         // Use try_send to avoid blocking MIDI thread
                         let _ = event_tx.try_send(event);
                     }
@@ -50,7 +59,7 @@ impl MidiHandler {
     /// Connect to MIDI input device and start receiving messages
     /// Auto-selects first available device (legacy method)
     #[allow(dead_code)]
-    pub fn new(event_tx: Sender<SynthEvent>) -> Result<Self> {
+    pub fn new(event_tx: Sender<SynthEvent>, parameters: Arc<SynthParameters>) -> Result<Self> {
         let midi_in = MidiInput::new("the-synth-input")?;
 
         // Get available MIDI input ports
@@ -101,8 +110,11 @@ impl MidiHandler {
                     // Parse MIDI message
                     let message = MidiMessage::parse(bytes);
 
-                    // Convert to synth event and send
-                    if let Some(event) = message.to_synth_event() {
+                    // Read channel filter from parameters
+                    let channel_filter = parameters.midi_channel.load(Ordering::Relaxed);
+
+                    // Convert to synth event with channel filtering
+                    if let Some(event) = message.to_synth_event(channel_filter) {
                         // Use try_send to avoid blocking MIDI thread
                         let _ = event_tx.try_send(event);
                     }

@@ -75,15 +75,30 @@ impl MidiMessage {
     }
 
     /// Convert MIDI message to synth event
-    pub fn to_synth_event(&self) -> Option<SynthEvent> {
+    /// Filters by MIDI channel: 255 = omni (all channels), 0-15 = specific channel
+    pub fn to_synth_event(&self, channel_filter: u8) -> Option<SynthEvent> {
         match self {
-            MidiMessage::NoteOn { note, velocity, .. } => {
+            MidiMessage::NoteOn { channel, note, velocity } => {
+                // Filter by channel (255 = omni mode)
+                if channel_filter != 255 && *channel != channel_filter {
+                    return None;
+                }
                 let frequency = midi_note_to_frequency(*note);
                 let amplitude = midi_velocity_to_amplitude(*velocity);
                 Some(SynthEvent::note_on(frequency, amplitude))
             }
-            MidiMessage::NoteOff { note, .. } => Some(SynthEvent::note_off(*note)),
-            MidiMessage::ControlChange { controller, .. } => {
+            MidiMessage::NoteOff { channel, note, .. } => {
+                // Filter by channel (255 = omni mode)
+                if channel_filter != 255 && *channel != channel_filter {
+                    return None;
+                }
+                Some(SynthEvent::note_off(*note))
+            }
+            MidiMessage::ControlChange { channel, controller, .. } => {
+                // Filter by channel (255 = omni mode)
+                if channel_filter != 255 && *channel != channel_filter {
+                    return None;
+                }
                 // CC 123 = All Notes Off (MIDI panic)
                 if *controller == 123 {
                     Some(SynthEvent::all_notes_off())
@@ -142,7 +157,7 @@ mod tests {
             note: 69, // A4
             velocity: 100,
         };
-        let event = msg.to_synth_event().unwrap();
+        let event = msg.to_synth_event(255).unwrap(); // 255 = omni mode
         if let SynthEvent::NoteOn { frequency, .. } = event {
             assert!((frequency - 440.0).abs() < 0.1);
         } else {

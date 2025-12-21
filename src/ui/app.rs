@@ -28,6 +28,8 @@ pub struct App {
     pub release: f32,
     /// Current waveform
     pub waveform: Waveform,
+    /// MIDI channel filter (None = omni/all channels, Some(0-15) = specific channel)
+    pub midi_channel: Option<u8>,
     /// Currently selected parameter for editing
     pub selected_param: Parameter,
     /// Number of active voices (updated from audio thread)
@@ -45,6 +47,7 @@ pub enum Parameter {
     Sustain,
     Release,
     Waveform,
+    Channel,
 }
 
 impl App {
@@ -59,6 +62,7 @@ impl App {
             sustain: 0.7,
             release: 0.3,
             waveform: Waveform::Sine,
+            midi_channel: None, // Omni mode by default
             selected_param: Parameter::Attack,
             active_voices: 0,
             should_quit: false,
@@ -96,18 +100,20 @@ impl App {
             Parameter::Decay => Parameter::Sustain,
             Parameter::Sustain => Parameter::Release,
             Parameter::Release => Parameter::Waveform,
-            Parameter::Waveform => Parameter::Attack,
+            Parameter::Waveform => Parameter::Channel,
+            Parameter::Channel => Parameter::Attack,
         };
     }
 
     /// Cycle to previous parameter
     pub fn prev_parameter(&mut self) {
         self.selected_param = match self.selected_param {
-            Parameter::Attack => Parameter::Waveform,
+            Parameter::Attack => Parameter::Channel,
             Parameter::Decay => Parameter::Attack,
             Parameter::Sustain => Parameter::Decay,
             Parameter::Release => Parameter::Sustain,
             Parameter::Waveform => Parameter::Release,
+            Parameter::Channel => Parameter::Waveform,
         };
     }
 
@@ -136,6 +142,14 @@ impl App {
                     Waveform::Triangle => Waveform::Sawtooth,
                     Waveform::Sawtooth => Waveform::Square,
                     Waveform::Square => Waveform::Sine,
+                };
+                self.sync_to_audio();
+            }
+            Parameter::Channel => {
+                self.midi_channel = match self.midi_channel {
+                    None => Some(0),           // Omni -> Ch1
+                    Some(15) => None,          // Ch16 -> Omni
+                    Some(ch) => Some(ch + 1),  // Ch(n) -> Ch(n+1)
                 };
                 self.sync_to_audio();
             }
@@ -170,6 +184,14 @@ impl App {
                 };
                 self.sync_to_audio();
             }
+            Parameter::Channel => {
+                self.midi_channel = match self.midi_channel {
+                    None => Some(15),          // Omni -> Ch16
+                    Some(0) => None,           // Ch1 -> Omni
+                    Some(ch) => Some(ch - 1),  // Ch(n) -> Ch(n-1)
+                };
+                self.sync_to_audio();
+            }
         }
     }
 
@@ -180,6 +202,10 @@ impl App {
         self.parameters.sustain.store(self.sustain, Ordering::Relaxed);
         self.parameters.release.store(self.release, Ordering::Relaxed);
         self.parameters.waveform.store(self.waveform.to_u8(), Ordering::Relaxed);
+
+        // Convert Option<u8> to u8: None = 255 (omni), Some(ch) = ch
+        let channel_value = self.midi_channel.unwrap_or(255);
+        self.parameters.midi_channel.store(channel_value, Ordering::Relaxed);
     }
 
     /// Mark app for quit

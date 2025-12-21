@@ -13,6 +13,8 @@ pub struct SynthParameters {
     pub release: AtomicF32,
     /// Waveform type (0=Sine, 1=Triangle, 2=Sawtooth, 3=Square)
     pub waveform: AtomicU8,
+    /// MIDI channel filter (0-15=specific channel, 255=omni/all channels)
+    pub midi_channel: AtomicU8,
 }
 
 impl SynthParameters {
@@ -23,6 +25,7 @@ impl SynthParameters {
             sustain: AtomicF32::new(0.7),     // 70%
             release: AtomicF32::new(0.3),     // 300ms
             waveform: AtomicU8::new(0),       // Sine
+            midi_channel: AtomicU8::new(255), // Omni (all channels)
         }
     }
 }

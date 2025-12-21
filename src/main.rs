@@ -70,7 +70,7 @@ fn main() -> Result<()> {
     let (voice_tx, voice_rx) = crossbeam_channel::unbounded();
 
     // Connect to selected MIDI device
-    let _midi_handler = MidiHandler::new_with_device(event_tx, selected_device_index)?;
+    let _midi_handler = MidiHandler::new_with_device(event_tx, selected_device_index, parameters.clone())?;
 
     // Initialize audio
     let host = cpal::default_host();
