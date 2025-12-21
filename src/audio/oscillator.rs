@@ -1,7 +1,7 @@
-use std::f32::consts::PI;
+use crate::types::waveform::Waveform;
 
-/// Basic oscillator with phase accumulation
-/// Generates sine wave for Phase 1 (other waveforms in Phase 2)
+/// Oscillator with phase accumulation
+/// Supports multiple waveforms: sine, triangle, sawtooth, square
 pub struct Oscillator {
     /// Current phase position (0.0 to 1.0)
     phase: f32,
@@ -11,6 +11,8 @@ pub struct Oscillator {
     frequency: f32,
     /// Sample rate in Hz
     sample_rate: f32,
+    /// Current waveform type
+    waveform: Waveform,
 }
 
 impl Oscillator {
@@ -21,9 +23,15 @@ impl Oscillator {
             phase_delta: 0.0,
             frequency: 440.0,
             sample_rate,
+            waveform: Waveform::Sine,
         };
         osc.update_phase_delta();
         osc
+    }
+
+    /// Set the waveform type
+    pub fn set_waveform(&mut self, waveform: Waveform) {
+        self.waveform = waveform;
     }
 
     /// Set the oscillator frequency
@@ -39,8 +47,8 @@ impl Oscillator {
 
     /// Generate next sample and advance phase
     pub fn next_sample(&mut self) -> f32 {
-        // Generate sine wave from phase
-        let output = (self.phase * 2.0 * PI).sin();
+        // Generate sample using current waveform
+        let output = self.waveform.generate(self.phase);
 
         // Advance phase and wrap around
         self.phase += self.phase_delta;

@@ -1,4 +1,5 @@
 mod audio;
+mod types;
 
 use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -7,8 +8,8 @@ use std::sync::Arc;
 use audio::{engine::SynthEngine, parameters::SynthParameters};
 
 fn main() -> Result<()> {
-    println!("The Synth - Phase 1: Audio Foundation");
-    println!("======================================");
+    println!("The Synth - Phase 2: Complete DSP Chain");
+    println!("========================================");
 
     // Initialize audio host
     let host = cpal::default_host();
@@ -48,7 +49,9 @@ where
 
     println!("Sample rate: {} Hz", sample_rate);
     println!("Channels: {}", channels);
-    println!("\nPlaying 440Hz sine wave...");
+    println!("\nPlaying 440Hz note with ADSR envelope...");
+    println!("Note will trigger at start, release after 0.5s");
+    println!("ADSR: Attack=10ms, Decay=100ms, Sustain=70%, Release=300ms");
     println!("Press Ctrl+C to stop\n");
 
     // Create synth engine
