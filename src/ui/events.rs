@@ -1,7 +1,7 @@
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
 use std::time::Duration;
 
-use super::app::App;
+use super::app::{App, AppMode};
 
 /// Handle keyboard events and update app state
 pub fn handle_events(app: &mut App) -> anyhow::Result<()> {
@@ -16,6 +16,29 @@ pub fn handle_events(app: &mut App) -> anyhow::Result<()> {
 
 /// Process individual key press
 fn handle_key_event(app: &mut App, key: KeyEvent) {
+    // Handle device selection mode
+    if app.mode == AppMode::DeviceSelection {
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Esc => {
+                app.quit();
+            }
+            KeyCode::Up => {
+                app.prev_device();
+            }
+            KeyCode::Down => {
+                app.next_device();
+            }
+            KeyCode::Enter => {
+                if !app.midi_devices.is_empty() {
+                    app.confirm_device();
+                }
+            }
+            _ => {}
+        }
+        return;
+    }
+
+    // Handle synthesizer mode
     match key.code {
         // Quit
         KeyCode::Char('q') | KeyCode::Esc => {

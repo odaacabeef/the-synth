@@ -2,9 +2,22 @@ use crate::types::waveform::Waveform;
 use std::sync::{atomic::Ordering, Arc};
 use crate::audio::parameters::SynthParameters;
 
+/// Application mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppMode {
+    DeviceSelection,
+    Synthesizer,
+}
+
 /// UI application state
 /// Tracks all editable parameters and UI state
 pub struct App {
+    /// Current application mode
+    pub mode: AppMode,
+    /// Available MIDI devices
+    pub midi_devices: Vec<String>,
+    /// Selected device index
+    pub selected_device_index: usize,
     /// ADSR Attack time (0.001 to 2.0 seconds)
     pub attack: f32,
     /// ADSR Decay time (0.001 to 2.0 seconds)
@@ -35,9 +48,12 @@ pub enum Parameter {
 }
 
 impl App {
-    /// Create new app with default values
-    pub fn new(parameters: Arc<SynthParameters>) -> Self {
+    /// Create new app with default values and MIDI device list
+    pub fn new(parameters: Arc<SynthParameters>, midi_devices: Vec<String>) -> Self {
         Self {
+            mode: AppMode::DeviceSelection,
+            midi_devices,
+            selected_device_index: 0,
             attack: 0.01,
             decay: 0.1,
             sustain: 0.7,
@@ -48,6 +64,29 @@ impl App {
             should_quit: false,
             parameters,
         }
+    }
+
+    /// Navigate to next device in list
+    pub fn next_device(&mut self) {
+        if !self.midi_devices.is_empty() {
+            self.selected_device_index = (self.selected_device_index + 1) % self.midi_devices.len();
+        }
+    }
+
+    /// Navigate to previous device in list
+    pub fn prev_device(&mut self) {
+        if !self.midi_devices.is_empty() {
+            if self.selected_device_index == 0 {
+                self.selected_device_index = self.midi_devices.len() - 1;
+            } else {
+                self.selected_device_index -= 1;
+            }
+        }
+    }
+
+    /// Confirm device selection and switch to synthesizer mode
+    pub fn confirm_device(&mut self) {
+        self.mode = AppMode::Synthesizer;
     }
 
     /// Cycle to next parameter

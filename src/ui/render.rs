@@ -2,14 +2,88 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Gauge, Paragraph},
+    widgets::{Block, Borders, Gauge, List, ListItem, Paragraph},
     Frame,
 };
 
-use super::app::{App, Parameter};
+use super::app::{App, AppMode, Parameter};
 
 /// Render the TUI
 pub fn render(frame: &mut Frame, app: &App) {
+    match app.mode {
+        AppMode::DeviceSelection => render_device_selection(frame, app),
+        AppMode::Synthesizer => render_synthesizer(frame, app),
+    }
+}
+
+/// Render device selection screen
+fn render_device_selection(frame: &mut Frame, app: &App) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),  // Title
+            Constraint::Min(0),     // Device list
+            Constraint::Length(5),  // Help (increased for better visibility)
+        ])
+        .split(frame.size());
+
+    // Title
+    let title = Paragraph::new("The Synth - MIDI Device Selection")
+        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL));
+    frame.render_widget(title, chunks[0]);
+
+    // Device list
+    let devices: Vec<ListItem> = app
+        .midi_devices
+        .iter()
+        .enumerate()
+        .map(|(i, device)| {
+            let style = if i == app.selected_device_index {
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            let prefix = if i == app.selected_device_index {
+                "► "
+            } else {
+                "  "
+            };
+            ListItem::new(format!("{}{}", prefix, device)).style(style)
+        })
+        .collect();
+
+    let list = List::new(devices).block(
+        Block::default()
+            .title("Select MIDI Input Device")
+            .borders(Borders::ALL),
+    );
+    frame.render_widget(list, chunks[1]);
+
+    // Help
+    let help_text = if app.midi_devices.is_empty() {
+        vec![
+            Line::from("No MIDI devices found!"),
+            Line::from("Press Q to quit or connect a MIDI device and restart."),
+        ]
+    } else {
+        vec![
+            Line::from("Controls:"),
+            Line::from("  ↑/↓: Select device  |  Enter: Confirm  |  Q/Esc: Quit"),
+        ]
+    };
+
+    let help = Paragraph::new(help_text)
+        .block(Block::default().borders(Borders::ALL))
+        .style(Style::default().fg(Color::Gray));
+    frame.render_widget(help, chunks[2]);
+}
+
+/// Render synthesizer screen
+fn render_synthesizer(frame: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -17,7 +91,7 @@ pub fn render(frame: &mut Frame, app: &App) {
             Constraint::Length(7),  // ADSR controls
             Constraint::Length(5),  // Waveform
             Constraint::Length(3),  // Voice meter
-            Constraint::Min(0),     // Help text
+            Constraint::Length(4),  // Help text (fixed height)
         ])
         .split(frame.size());
 

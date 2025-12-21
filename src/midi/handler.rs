@@ -12,8 +12,44 @@ pub struct MidiHandler {
 }
 
 impl MidiHandler {
+    /// Connect to a specific MIDI input device by index
+    pub fn new_with_device(event_tx: Sender<SynthEvent>, device_index: usize) -> Result<Self> {
+        let midi_in = MidiInput::new("the-synth-input")?;
+        let ports = midi_in.ports();
+
+        if device_index >= ports.len() {
+            return Err(anyhow!("Device index out of range"));
+        }
+
+        let selected_port = &ports[device_index];
+
+        // Connect to the selected port
+        let connection = midi_in
+            .connect(
+                selected_port,
+                "the-synth-input",
+                move |_timestamp, bytes, _| {
+                    // Parse MIDI message
+                    let message = MidiMessage::parse(bytes);
+
+                    // Convert to synth event and send
+                    if let Some(event) = message.to_synth_event() {
+                        // Use try_send to avoid blocking MIDI thread
+                        let _ = event_tx.try_send(event);
+                    }
+                },
+                (),
+            )
+            .map_err(|e| anyhow!("Failed to connect to MIDI port: {}", e))?;
+
+        Ok(Self {
+            _connection: connection,
+        })
+    }
+
     /// Connect to MIDI input device and start receiving messages
-    /// Sends parsed events through the provided channel
+    /// Auto-selects first available device (legacy method)
+    #[allow(dead_code)]
     pub fn new(event_tx: Sender<SynthEvent>) -> Result<Self> {
         let midi_in = MidiInput::new("the-synth-input")?;
 

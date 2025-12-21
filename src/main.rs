@@ -18,20 +18,61 @@ use std::{
 
 use audio::{engine::SynthEngine, parameters::SynthParameters};
 use midi::handler::MidiHandler;
-use ui::{app::App, events, render};
+use ui::{app::{App, AppMode}, events, render};
 
 fn main() -> Result<()> {
-    // Create event channel for MIDI → Audio communication
-    // Use unbounded to ensure Note Off messages are never dropped
-    let (event_tx, event_rx) = crossbeam_channel::unbounded();
+    // List available MIDI devices
+    let midi_devices = MidiHandler::list_devices()?;
 
-    // Create channel for Audio → UI communication (voice count updates)
+    // Setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Create shared parameters
+    let parameters = Arc::new(SynthParameters::new());
+
+    // Create app with device list
+    let mut app = App::new(parameters.clone(), midi_devices.clone());
+
+    // Device selection loop
+    loop {
+        // Render UI
+        terminal.draw(|f| render::render(f, &app))?;
+
+        // Handle events
+        events::handle_events(&mut app)?;
+
+        // Check if should quit
+        if app.should_quit {
+            // Restore terminal
+            disable_raw_mode()?;
+            execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+            terminal.show_cursor()?;
+            return Ok(());
+        }
+
+        // Check if device selected
+        if app.mode == AppMode::Synthesizer {
+            break;
+        }
+
+        std::thread::sleep(Duration::from_millis(16));
+    }
+
+    // Get selected device index
+    let selected_device_index = app.selected_device_index;
+
+    // Create event channels
+    let (event_tx, event_rx) = crossbeam_channel::unbounded();
     let (voice_tx, voice_rx) = crossbeam_channel::unbounded();
 
-    // Initialize MIDI input (suppress output for TUI)
-    let _midi_handler = MidiHandler::new(event_tx)?;
+    // Connect to selected MIDI device
+    let _midi_handler = MidiHandler::new_with_device(event_tx, selected_device_index)?;
 
-    // Initialize audio host
+    // Initialize audio
     let host = cpal::default_host();
     let device = host
         .default_output_device()
@@ -39,10 +80,7 @@ fn main() -> Result<()> {
 
     let config = device.default_output_config()?;
 
-    // Create shared parameters
-    let parameters = Arc::new(SynthParameters::new());
-
-    // Build and start audio stream based on sample format
+    // Start audio stream
     let _stream = match config.sample_format() {
         cpal::SampleFormat::F32 => {
             start_audio_stream::<f32>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
@@ -56,10 +94,15 @@ fn main() -> Result<()> {
         _ => panic!("Unsupported sample format"),
     };
 
-    // Run TUI
-    run_tui(parameters, voice_rx)?;
+    // Run synthesizer UI loop
+    let result = run_ui_loop(&mut terminal, &mut app, voice_rx);
 
-    Ok(())
+    // Restore terminal
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    terminal.show_cursor()?;
+
+    result
 }
 
 fn start_audio_stream<T>(
@@ -120,31 +163,6 @@ where
     stream.play()?;
 
     Ok(stream)
-}
-
-fn run_tui(
-    parameters: Arc<SynthParameters>,
-    voice_rx: crossbeam_channel::Receiver<usize>,
-) -> Result<()> {
-    // Setup terminal
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-
-    // Create app
-    let mut app = App::new(parameters);
-
-    // Run UI loop
-    let result = run_ui_loop(&mut terminal, &mut app, voice_rx);
-
-    // Restore terminal
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-    terminal.show_cursor()?;
-
-    result
 }
 
 fn run_ui_loop(
