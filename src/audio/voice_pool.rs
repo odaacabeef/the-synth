@@ -86,15 +86,15 @@ impl VoicePool {
         self.global_age += 1;
     }
 
-    /// Trigger a note off - finds matching voice
+    /// Trigger a note off - finds matching voice(s)
     pub fn note_off(&mut self, note: u8) {
-        // Find voice playing this note
+        // Release ALL voices playing this note
+        // (handles cases where same note triggered multiple times)
         for pool_voice in &mut self.voices {
             if let VoiceState::Active { note: active_note } = pool_voice.state {
                 if active_note == note {
                     pool_voice.voice.note_off();
                     // Keep state as Active until envelope is done
-                    break;
                 }
             }
         }
