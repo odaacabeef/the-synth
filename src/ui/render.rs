@@ -54,7 +54,7 @@ fn render_device_selection(frame: &mut Frame, app: &App) {
         .map(|(i, device)| {
             let style = if app.selecting_midi && i == app.selected_midi_device {
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Color::Magenta)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
@@ -70,9 +70,9 @@ fn render_device_selection(frame: &mut Frame, app: &App) {
 
     let midi_title = "MIDI Input";
     let midi_border_style = if app.selecting_midi {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(Color::Magenta)
     } else {
-        Style::default()
+        Style::default().fg(Color::DarkGray)
     };
 
     let midi_list = List::new(midi_devices).block(
@@ -91,7 +91,7 @@ fn render_device_selection(frame: &mut Frame, app: &App) {
         .map(|(i, device)| {
             let style = if !app.selecting_midi && i == app.selected_audio_device {
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Color::Magenta)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
@@ -107,9 +107,9 @@ fn render_device_selection(frame: &mut Frame, app: &App) {
 
     let audio_title = "Audio Output";
     let audio_border_style = if !app.selecting_midi {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(Color::Magenta)
     } else {
-        Style::default()
+        Style::default().fg(Color::DarkGray)
     };
 
     let audio_list = List::new(audio_devices).block(
@@ -157,10 +157,14 @@ fn render_title(frame: &mut Frame, area: Rect) {
 
 /// Render ADSR parameter controls
 fn render_adsr_controls(frame: &mut Frame, area: Rect, app: &App) {
+    let is_active = matches!(app.selected_param,
+        Parameter::Attack | Parameter::Decay | Parameter::Sustain | Parameter::Release);
+    let border_color = if is_active { Color::Magenta } else { Color::DarkGray };
+
     let block = Block::default()
         .title("ADSR Envelope")
         .borders(Borders::ALL)
-        .style(Style::default().fg(Color::White));
+        .border_style(Style::default().fg(border_color));
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -184,10 +188,14 @@ fn render_adsr_controls(frame: &mut Frame, area: Rect, app: &App) {
 
 /// Render reverb parameter controls
 fn render_reverb_controls(frame: &mut Frame, area: Rect, app: &App) {
+    let is_active = matches!(app.selected_param,
+        Parameter::ReverbMix | Parameter::ReverbRoomSize | Parameter::ReverbDamping);
+    let border_color = if is_active { Color::Magenta } else { Color::DarkGray };
+
     let block = Block::default()
         .title("Reverb")
         .borders(Borders::ALL)
-        .style(Style::default().fg(Color::White));
+        .border_style(Style::default().fg(border_color));
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -220,7 +228,7 @@ fn render_parameter(
 ) {
     let ratio = ((value - min) / (max - min)).clamp(0.0, 1.0);
 
-    let color = if selected { Color::Yellow } else { Color::Green };
+    let color = if selected { Color::Magenta } else { Color::DarkGray };
     let style = if selected {
         Style::default().fg(color).add_modifier(Modifier::BOLD)
     } else {
@@ -246,7 +254,7 @@ fn render_parameter(
 /// Render waveform selector
 fn render_waveform_selector(frame: &mut Frame, area: Rect, app: &App) {
     let selected = app.selected_param == Parameter::Waveform;
-    let color = if selected { Color::Yellow } else { Color::White };
+    let color = if selected { Color::Magenta } else { Color::DarkGray };
 
     let waveform_text = format!("Waveform: {:?}", app.waveform);
 
@@ -262,8 +270,13 @@ fn render_waveform_selector(frame: &mut Frame, area: Rect, app: &App) {
         Line::from("Quick select: 1=Sine 2=Triangle 3=Sawtooth 4=Square"),
     ];
 
+    let border_color = if selected { Color::Magenta } else { Color::DarkGray };
+
     let paragraph = Paragraph::new(waveforms)
-        .block(Block::default().title("Waveform").borders(Borders::ALL))
+        .block(Block::default()
+            .title("Waveform")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(border_color)))
         .alignment(Alignment::Center);
 
     frame.render_widget(paragraph, area);
@@ -272,7 +285,7 @@ fn render_waveform_selector(frame: &mut Frame, area: Rect, app: &App) {
 /// Render MIDI channel selector
 fn render_channel_selector(frame: &mut Frame, area: Rect, app: &App) {
     let selected = app.selected_param == Parameter::Channel;
-    let color = if selected { Color::Yellow } else { Color::White };
+    let color = if selected { Color::Magenta } else { Color::DarkGray };
 
     let channel_text = match app.midi_channel {
         None => "MIDI Channel: Omni (All)".to_string(),
@@ -289,8 +302,13 @@ fn render_channel_selector(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(Span::styled(channel_text, style)),
     ];
 
+    let border_color = if selected { Color::Magenta } else { Color::DarkGray };
+
     let paragraph = Paragraph::new(lines)
-        .block(Block::default().title("MIDI Channel").borders(Borders::ALL))
+        .block(Block::default()
+            .title("MIDI Channel")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(border_color)))
         .alignment(Alignment::Center);
 
     frame.render_widget(paragraph, area);
