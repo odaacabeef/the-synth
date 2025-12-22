@@ -131,7 +131,7 @@ fn render_synthesizer(frame: &mut Frame, app: &App) {
             Constraint::Length(7),  // Reverb controls
             Constraint::Length(5),  // Waveform
             Constraint::Length(4),  // Channel selector
-            Constraint::Length(15), // Oscilloscope (13 lines + 2 borders)
+            Constraint::Length(9),  // Oscilloscope (7 lines + 2 borders)
             Constraint::Length(3),  // Voice meter
         ])
         .split(frame.size());
@@ -329,7 +329,7 @@ fn render_voice_meter(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 /// Render oscilloscope waveform visualization
-/// 13 lines: Line 7 = 0V, Lines 1-6 = positive, Lines 8-13 = negative
+/// 7 lines: Line 3 = 0V, Lines 0-2 = positive, Lines 4-6 = negative
 fn render_oscilloscope(frame: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .title("Oscilloscope")
@@ -342,13 +342,13 @@ fn render_oscilloscope(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     let width = inner.width as usize;
-    const HEIGHT: usize = 13; // Fixed 13 lines
+    const HEIGHT: usize = 7; // Fixed 7 lines
 
     if width == 0 {
         return;
     }
 
-    // Create a 2D grid for the waveform (13 lines)
+    // Create a 2D grid for the waveform (7 lines)
     let mut grid = vec![vec![' '; width]; HEIGHT];
 
     // Downsample audio samples to fit width
@@ -370,11 +370,11 @@ fn render_oscilloscope(frame: &mut Frame, area: Rect, app: &App) {
 
         let sample = app.waveform_samples[sample_idx];
 
-        // Map sample from -1.0..1.0 to line 0..12 (inverted for display)
+        // Map sample from -1.0..1.0 to line 0..6 (inverted for display)
         // +1.0 (max positive) -> line 0
-        // 0.0 (zero) -> line 6 (middle)
-        // -1.0 (max negative) -> line 12
-        let line = ((1.0 - sample) * 6.0).clamp(0.0, 12.0).round() as usize;
+        // 0.0 (zero) -> line 3 (middle)
+        // -1.0 (max negative) -> line 6
+        let line = ((1.0 - sample) * 3.0).clamp(0.0, 6.0).round() as usize;
 
         // Plot dot
         grid[line][x] = '.';
