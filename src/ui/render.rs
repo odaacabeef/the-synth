@@ -18,36 +18,41 @@ pub fn render(frame: &mut Frame, app: &App) {
 
 /// Render device selection screen
 fn render_device_selection(frame: &mut Frame, app: &App) {
+    // Calculate heights based on number of devices (+3 for borders and title)
+    let midi_height = (app.midi_devices.len() + 3).min(15) as u16; // Cap at 15 lines
+    let audio_height = (app.audio_devices.len() + 3).min(15) as u16; // Cap at 15 lines
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Title
-            Constraint::Min(0),     // Device list
-            Constraint::Length(5),  // Help (increased for better visibility)
+            Constraint::Length(3),           // Title
+            Constraint::Length(midi_height), // MIDI devices (sized to content)
+            Constraint::Length(audio_height),// Audio devices (sized to content)
+            Constraint::Length(5),           // Help
         ])
         .split(frame.size());
 
     // Title
-    let title = Paragraph::new("The Synth - MIDI Device Selection")
+    let title = Paragraph::new("The Synth - Device Selection")
         .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
     frame.render_widget(title, chunks[0]);
 
-    // Device list
-    let devices: Vec<ListItem> = app
+    // MIDI device list
+    let midi_devices: Vec<ListItem> = app
         .midi_devices
         .iter()
         .enumerate()
         .map(|(i, device)| {
-            let style = if i == app.selected_device_index {
+            let style = if app.selecting_midi && i == app.selected_midi_device {
                 Style::default()
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             };
-            let prefix = if i == app.selected_device_index {
+            let prefix = if i == app.selected_midi_device {
                 "► "
             } else {
                 "  "
@@ -56,30 +61,75 @@ fn render_device_selection(frame: &mut Frame, app: &App) {
         })
         .collect();
 
-    let list = List::new(devices).block(
+    let midi_title = "MIDI Input";
+    let midi_border_style = if app.selecting_midi {
+        Style::default().fg(Color::Yellow)
+    } else {
+        Style::default()
+    };
+
+    let midi_list = List::new(midi_devices).block(
         Block::default()
-            .title("Select MIDI Input Device")
-            .borders(Borders::ALL),
+            .title(midi_title)
+            .borders(Borders::ALL)
+            .border_style(midi_border_style),
     );
-    frame.render_widget(list, chunks[1]);
+    frame.render_widget(midi_list, chunks[1]);
+
+    // Audio device list
+    let audio_devices: Vec<ListItem> = app
+        .audio_devices
+        .iter()
+        .enumerate()
+        .map(|(i, device)| {
+            let style = if !app.selecting_midi && i == app.selected_audio_device {
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            let prefix = if i == app.selected_audio_device {
+                "► "
+            } else {
+                "  "
+            };
+            ListItem::new(format!("{}{}", prefix, device)).style(style)
+        })
+        .collect();
+
+    let audio_title = "Audio Output";
+    let audio_border_style = if !app.selecting_midi {
+        Style::default().fg(Color::Yellow)
+    } else {
+        Style::default()
+    };
+
+    let audio_list = List::new(audio_devices).block(
+        Block::default()
+            .title(audio_title)
+            .borders(Borders::ALL)
+            .border_style(audio_border_style),
+    );
+    frame.render_widget(audio_list, chunks[2]);
 
     // Help
-    let help_text = if app.midi_devices.is_empty() {
+    let help_text = if app.midi_devices.is_empty() || app.audio_devices.is_empty() {
         vec![
-            Line::from("No MIDI devices found!"),
-            Line::from("Press Q to quit or connect a MIDI device and restart."),
+            Line::from("Device error!"),
+            Line::from("Press q or Ctrl+C to quit."),
         ]
     } else {
         vec![
             Line::from("Controls:"),
-            Line::from("  k/j or ↑/↓: Select device  |  Enter: Confirm  |  q or Ctrl+C: Quit"),
+            Line::from("  h/l or ←/→: Switch MIDI/Audio  |  k/j or ↑/↓: Select  |  Enter: Confirm  |  q or Ctrl+C: Quit"),
         ]
     };
 
     let help = Paragraph::new(help_text)
         .block(Block::default().borders(Borders::ALL))
         .style(Style::default().fg(Color::Gray));
-    frame.render_widget(help, chunks[2]);
+    frame.render_widget(help, chunks[3]);
 }
 
 /// Render synthesizer screen
@@ -315,7 +365,7 @@ fn render_oscilloscope(frame: &mut Frame, area: Rect, app: &App) {
 fn render_help(frame: &mut Frame, area: Rect) {
     let help_text = vec![
         Line::from("Controls:"),
-        Line::from("  h/l or ←/→: Select parameter  |  k/j or ↑/↓: Adjust value  |  q or Ctrl+C: Quit"),
+        Line::from("  h/l or ←/→: Select parameter  |  k/j or ↑/↓: Adjust value  |  Esc: Device select  |  q or Ctrl+C: Quit"),
     ];
 
     let paragraph = Paragraph::new(help_text)

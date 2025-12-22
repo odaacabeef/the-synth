@@ -28,6 +28,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             KeyCode::Char('q') => {
                 app.quit();
             }
+            KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') => {
+                app.toggle_device_focus();
+            }
             KeyCode::Up | KeyCode::Char('k') => {
                 app.prev_device();
             }
@@ -35,7 +38,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.next_device();
             }
             KeyCode::Enter => {
-                if !app.midi_devices.is_empty() {
+                if !app.midi_devices.is_empty() && !app.audio_devices.is_empty() {
                     app.confirm_device();
                 }
             }
@@ -55,6 +58,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         // Quit
         KeyCode::Char('q') => {
             app.quit();
+        }
+
+        // Go back to device selection
+        KeyCode::Esc => {
+            app.go_back();
         }
 
         // Navigate parameters (vim-style: h=left, l=right)

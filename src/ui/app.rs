@@ -15,10 +15,16 @@ pub enum AppMode {
 pub struct App {
     /// Current application mode
     pub mode: AppMode,
-    /// Available MIDI devices
+    /// Available MIDI input devices
     pub midi_devices: Vec<String>,
-    /// Selected device index
-    pub selected_device_index: usize,
+    /// Selected MIDI device index
+    pub selected_midi_device: usize,
+    /// Available audio output devices
+    pub audio_devices: Vec<String>,
+    /// Selected audio device index
+    pub selected_audio_device: usize,
+    /// Currently focused selection (true = MIDI, false = Audio)
+    pub selecting_midi: bool,
     /// ADSR Attack time (0.001 to 2.0 seconds)
     pub attack: f32,
     /// ADSR Decay time (0.001 to 2.0 seconds)
@@ -41,6 +47,8 @@ pub struct App {
     pub max_samples: usize,
     /// Whether to quit the application
     pub should_quit: bool,
+    /// Whether to go back to device selection
+    pub back_to_device_selection: bool,
     /// Reference to shared parameters
     pub parameters: Arc<SynthParameters>,
 }
@@ -56,15 +64,18 @@ pub enum Parameter {
 }
 
 impl App {
-    /// Create new app with default values and MIDI device list
-    pub fn new(parameters: Arc<SynthParameters>, midi_devices: Vec<String>) -> Self {
+    /// Create new app with default values and device lists
+    pub fn new(parameters: Arc<SynthParameters>, midi_devices: Vec<String>, audio_devices: Vec<String>) -> Self {
         const SAMPLE_RATE: usize = 44100;
         let max_samples = SAMPLE_RATE / 2; // 500ms at 44.1kHz (22,050 samples)
 
         Self {
             mode: AppMode::DeviceSelection,
             midi_devices,
-            selected_device_index: 0,
+            selected_midi_device: 0,
+            audio_devices,
+            selected_audio_device: 0,
+            selecting_midi: true, // Start with MIDI selection focused
             attack: 0.01,
             decay: 0.1,
             sustain: 0.7,
@@ -76,26 +87,48 @@ impl App {
             waveform_samples: VecDeque::with_capacity(max_samples),
             max_samples,
             should_quit: false,
+            back_to_device_selection: false,
             parameters,
         }
     }
 
-    /// Navigate to next device in list
+    /// Navigate to next device in currently focused list
     pub fn next_device(&mut self) {
-        if !self.midi_devices.is_empty() {
-            self.selected_device_index = (self.selected_device_index + 1) % self.midi_devices.len();
+        if self.selecting_midi {
+            if !self.midi_devices.is_empty() {
+                self.selected_midi_device = (self.selected_midi_device + 1) % self.midi_devices.len();
+            }
+        } else {
+            if !self.audio_devices.is_empty() {
+                self.selected_audio_device = (self.selected_audio_device + 1) % self.audio_devices.len();
+            }
         }
     }
 
-    /// Navigate to previous device in list
+    /// Navigate to previous device in currently focused list
     pub fn prev_device(&mut self) {
-        if !self.midi_devices.is_empty() {
-            if self.selected_device_index == 0 {
-                self.selected_device_index = self.midi_devices.len() - 1;
-            } else {
-                self.selected_device_index -= 1;
+        if self.selecting_midi {
+            if !self.midi_devices.is_empty() {
+                if self.selected_midi_device == 0 {
+                    self.selected_midi_device = self.midi_devices.len() - 1;
+                } else {
+                    self.selected_midi_device -= 1;
+                }
+            }
+        } else {
+            if !self.audio_devices.is_empty() {
+                if self.selected_audio_device == 0 {
+                    self.selected_audio_device = self.audio_devices.len() - 1;
+                } else {
+                    self.selected_audio_device -= 1;
+                }
             }
         }
+    }
+
+    /// Toggle between MIDI and audio device selection
+    pub fn toggle_device_focus(&mut self) {
+        self.selecting_midi = !self.selecting_midi;
     }
 
     /// Confirm device selection and switch to synthesizer mode
@@ -221,5 +254,14 @@ impl App {
     /// Mark app for quit
     pub fn quit(&mut self) {
         self.should_quit = true;
+    }
+
+    /// Go back to device selection screen
+    pub fn go_back(&mut self) {
+        self.back_to_device_selection = true;
+        self.mode = AppMode::DeviceSelection;
+        // Clear waveform samples when going back
+        self.waveform_samples.clear();
+        self.active_voices = 0;
     }
 }

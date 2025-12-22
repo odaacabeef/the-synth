@@ -20,9 +20,42 @@ use audio::{engine::SynthEngine, parameters::SynthParameters};
 use midi::handler::MidiHandler;
 use ui::{app::{App, AppMode}, events, render};
 
+/// List available audio output devices
+fn list_audio_devices() -> Result<Vec<String>> {
+    let host = cpal::default_host();
+
+    // Collect all devices from iterator
+    let mut devices: Vec<String> = host
+        .output_devices()?
+        .filter_map(|device| {
+            device.description()
+                .ok()
+                .map(|desc| desc.name().to_string())
+        })
+        .collect();
+
+    // Also try to get the default device explicitly
+    if let Some(default_device) = host.default_output_device() {
+        if let Ok(default_desc) = default_device.description() {
+            let default_name = default_desc.name().to_string();
+            // Add default device if not already in list
+            if !devices.contains(&default_name) {
+                devices.push(default_name);
+            }
+        }
+    }
+
+    if devices.is_empty() {
+        return Err(anyhow::anyhow!("No audio output devices found"));
+    }
+
+    Ok(devices)
+}
+
 fn main() -> Result<()> {
-    // List available MIDI devices
+    // List available MIDI and audio devices
     let midi_devices = MidiHandler::list_devices()?;
+    let audio_devices = list_audio_devices()?;
 
     // Setup terminal
     enable_raw_mode()?;
@@ -34,18 +67,75 @@ fn main() -> Result<()> {
     // Create shared parameters
     let parameters = Arc::new(SynthParameters::new());
 
-    // Create app with device list
-    let mut app = App::new(parameters.clone(), midi_devices.clone());
+    // Create app with device lists
+    let mut app = App::new(parameters.clone(), midi_devices.clone(), audio_devices.clone());
 
-    // Device selection loop
+    // Main application loop - allows going back to device selection
     loop {
-        // Render UI
-        terminal.draw(|f| render::render(f, &app))?;
+        // Device selection loop
+        loop {
+            // Render UI
+            terminal.draw(|f| render::render(f, &app))?;
 
-        // Handle events
-        events::handle_events(&mut app)?;
+            // Handle events
+            events::handle_events(&mut app)?;
 
-        // Check if should quit
+            // Check if should quit
+            if app.should_quit {
+                // Restore terminal
+                disable_raw_mode()?;
+                execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+                terminal.show_cursor()?;
+                return Ok(());
+            }
+
+            // Check if device selected
+            if app.mode == AppMode::Synthesizer {
+                break;
+            }
+
+            std::thread::sleep(Duration::from_millis(16));
+        }
+
+        // Get selected device indices
+        let selected_midi_device = app.selected_midi_device;
+        let selected_audio_device = app.selected_audio_device;
+
+        // Create event channels
+        let (event_tx, event_rx) = crossbeam_channel::unbounded();
+        let (voice_tx, voice_rx) = crossbeam_channel::unbounded();
+        let (waveform_tx, waveform_rx) = crossbeam_channel::unbounded();
+
+        // Connect to selected MIDI device
+        let _midi_handler = MidiHandler::new_with_device(event_tx, selected_midi_device, parameters.clone())?;
+
+        // Initialize audio with selected device
+        let host = cpal::default_host();
+        let device = host
+            .output_devices()?
+            .nth(selected_audio_device)
+            .expect("Selected audio device not available");
+
+        let config = device.default_output_config()?;
+
+        // Start audio stream
+        let _stream = match config.sample_format() {
+            cpal::SampleFormat::F32 => {
+                start_audio_stream::<f32>(&device, &config.into(), parameters.clone(), event_rx, voice_tx, waveform_tx)?
+            }
+            cpal::SampleFormat::I16 => {
+                start_audio_stream::<i16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx, waveform_tx)?
+            }
+            cpal::SampleFormat::U16 => {
+                start_audio_stream::<u16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx, waveform_tx)?
+            }
+            _ => panic!("Unsupported sample format"),
+        };
+
+        // Run synthesizer UI loop
+        run_ui_loop(&mut terminal, &mut app, voice_rx, waveform_rx)?;
+
+        // Check if should quit or go back to device selection
         if app.should_quit {
             // Restore terminal
             disable_raw_mode()?;
@@ -54,56 +144,13 @@ fn main() -> Result<()> {
             return Ok(());
         }
 
-        // Check if device selected
-        if app.mode == AppMode::Synthesizer {
-            break;
+        // If back_to_device_selection is true, reset flag and loop continues
+        if app.back_to_device_selection {
+            app.back_to_device_selection = false;
+            // Audio stream and MIDI handler will be dropped here, closing connections
+            continue;
         }
-
-        std::thread::sleep(Duration::from_millis(16));
     }
-
-    // Get selected device index
-    let selected_device_index = app.selected_device_index;
-
-    // Create event channels
-    let (event_tx, event_rx) = crossbeam_channel::unbounded();
-    let (voice_tx, voice_rx) = crossbeam_channel::unbounded();
-    let (waveform_tx, waveform_rx) = crossbeam_channel::unbounded();
-
-    // Connect to selected MIDI device
-    let _midi_handler = MidiHandler::new_with_device(event_tx, selected_device_index, parameters.clone())?;
-
-    // Initialize audio
-    let host = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .expect("No output device available");
-
-    let config = device.default_output_config()?;
-
-    // Start audio stream
-    let _stream = match config.sample_format() {
-        cpal::SampleFormat::F32 => {
-            start_audio_stream::<f32>(&device, &config.into(), parameters.clone(), event_rx, voice_tx, waveform_tx)?
-        }
-        cpal::SampleFormat::I16 => {
-            start_audio_stream::<i16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx, waveform_tx)?
-        }
-        cpal::SampleFormat::U16 => {
-            start_audio_stream::<u16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx, waveform_tx)?
-        }
-        _ => panic!("Unsupported sample format"),
-    };
-
-    // Run synthesizer UI loop
-    let result = run_ui_loop(&mut terminal, &mut app, voice_rx, waveform_rx);
-
-    // Restore terminal
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-    terminal.show_cursor()?;
-
-    result
 }
 
 fn start_audio_stream<T>(
@@ -117,7 +164,7 @@ fn start_audio_stream<T>(
 where
     T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>,
 {
-    let sample_rate = config.sample_rate.0 as f32;
+    let sample_rate = config.sample_rate as f32;
     let channels = config.channels as usize;
 
     // Create synth engine with MIDI event receiver
@@ -202,8 +249,8 @@ fn run_ui_loop(
         // Handle events
         events::handle_events(app)?;
 
-        // Check if should quit
-        if app.should_quit {
+        // Check if should quit or go back
+        if app.should_quit || app.back_to_device_selection {
             break;
         }
 
