@@ -49,6 +49,8 @@ pub struct App {
     pub should_quit: bool,
     /// Whether to go back to device selection
     pub back_to_device_selection: bool,
+    /// Whether to show help screen
+    pub show_help: bool,
     /// Reference to shared parameters
     pub parameters: Arc<SynthParameters>,
 }
@@ -88,6 +90,7 @@ impl App {
             max_samples,
             should_quit: false,
             back_to_device_selection: false,
+            show_help: false,
             parameters,
         }
     }
@@ -263,5 +266,10 @@ impl App {
         // Clear waveform samples when going back
         self.waveform_samples.clear();
         self.active_voices = 0;
+    }
+
+    /// Toggle help screen visibility
+    pub fn toggle_help(&mut self) {
+        self.show_help = !self.show_help;
     }
 }

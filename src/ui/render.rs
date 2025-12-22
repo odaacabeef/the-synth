@@ -10,9 +10,17 @@ use super::app::{App, AppMode, Parameter};
 
 /// Render the TUI
 pub fn render(frame: &mut Frame, app: &App) {
-    match app.mode {
-        AppMode::DeviceSelection => render_device_selection(frame, app),
-        AppMode::Synthesizer => render_synthesizer(frame, app),
+    // Show help screen if toggled
+    if app.show_help {
+        match app.mode {
+            AppMode::DeviceSelection => render_device_selection_help(frame),
+            AppMode::Synthesizer => render_synthesizer_help(frame),
+        }
+    } else {
+        match app.mode {
+            AppMode::DeviceSelection => render_device_selection(frame, app),
+            AppMode::Synthesizer => render_synthesizer(frame, app),
+        }
     }
 }
 
@@ -28,7 +36,6 @@ fn render_device_selection(frame: &mut Frame, app: &App) {
             Constraint::Length(3),           // Title
             Constraint::Length(midi_height), // MIDI devices (sized to content)
             Constraint::Length(audio_height),// Audio devices (sized to content)
-            Constraint::Length(5),           // Help
         ])
         .split(frame.size());
 
@@ -112,24 +119,6 @@ fn render_device_selection(frame: &mut Frame, app: &App) {
             .border_style(audio_border_style),
     );
     frame.render_widget(audio_list, chunks[2]);
-
-    // Help
-    let help_text = if app.midi_devices.is_empty() || app.audio_devices.is_empty() {
-        vec![
-            Line::from("Device error!"),
-            Line::from("Press q or Ctrl+C to quit."),
-        ]
-    } else {
-        vec![
-            Line::from("Controls:"),
-            Line::from("  h/l or ←/→: Switch MIDI/Audio  |  k/j or ↑/↓: Select  |  Enter: Confirm  |  q or Ctrl+C: Quit"),
-        ]
-    };
-
-    let help = Paragraph::new(help_text)
-        .block(Block::default().borders(Borders::ALL))
-        .style(Style::default().fg(Color::Gray));
-    frame.render_widget(help, chunks[3]);
 }
 
 /// Render synthesizer screen
@@ -143,7 +132,6 @@ fn render_synthesizer(frame: &mut Frame, app: &App) {
             Constraint::Length(4),  // Channel selector
             Constraint::Length(15), // Oscilloscope (13 lines + 2 borders)
             Constraint::Length(3),  // Voice meter
-            Constraint::Length(4),  // Help text (fixed height)
         ])
         .split(frame.size());
 
@@ -153,7 +141,6 @@ fn render_synthesizer(frame: &mut Frame, app: &App) {
     render_channel_selector(frame, chunks[3], app);
     render_oscilloscope(frame, chunks[4], app);
     render_voice_meter(frame, chunks[5], app);
-    render_help(frame, chunks[6]);
 }
 
 /// Render title bar
@@ -361,16 +348,77 @@ fn render_oscilloscope(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(paragraph, inner);
 }
 
-/// Render help text
-fn render_help(frame: &mut Frame, area: Rect) {
+/// Render device selection help screen
+fn render_device_selection_help(frame: &mut Frame) {
     let help_text = vec![
-        Line::from("Controls:"),
-        Line::from("  h/l or ←/→: Select parameter  |  k/j or ↑/↓: Adjust value  |  Esc: Device select  |  q or Ctrl+C: Quit"),
+        Line::from(""),
+        Line::from(Span::styled("Device Selection - Controls", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from("  h, l, ←, →     Switch between MIDI and Audio device lists"),
+        Line::from("  k, j, ↑, ↓     Navigate up/down in the focused list"),
+        Line::from("  Enter          Confirm device selection and start synthesizer"),
+        Line::from("  ?              Toggle this help screen"),
+        Line::from("  q, Ctrl+C      Quit application"),
+        Line::from(""),
+        Line::from(Span::styled("Usage", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from("  1. Use h/l or arrow keys to switch between MIDI and Audio lists"),
+        Line::from("  2. The focused list has a yellow border"),
+        Line::from("  3. Use k/j or arrow keys to select a device (marked with ►)"),
+        Line::from("  4. Press Enter to confirm and start the synthesizer"),
+        Line::from(""),
+        Line::from(Span::styled("Press ? to close this help screen", Style::default().fg(Color::Gray))),
     ];
 
     let paragraph = Paragraph::new(help_text)
-        .block(Block::default().borders(Borders::ALL))
-        .style(Style::default().fg(Color::Gray));
+        .block(Block::default()
+            .title("Help")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Green)))
+        .alignment(Alignment::Left);
 
-    frame.render_widget(paragraph, area);
+    frame.render_widget(paragraph, frame.size());
+}
+
+/// Render synthesizer help screen
+fn render_synthesizer_help(frame: &mut Frame) {
+    let help_text = vec![
+        Line::from(""),
+        Line::from(Span::styled("Synthesizer - Controls", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from("  h, l, ←, →     Navigate between parameters (Attack/Decay/Sustain/Release/Waveform/Channel)"),
+        Line::from("  k, j, ↑, ↓     Adjust the selected parameter value"),
+        Line::from("  1              Set waveform to Sine"),
+        Line::from("  2              Set waveform to Triangle"),
+        Line::from("  3              Set waveform to Sawtooth"),
+        Line::from("  4              Set waveform to Square"),
+        Line::from("  Esc            Return to device selection screen"),
+        Line::from("  ?              Toggle this help screen"),
+        Line::from("  q, Ctrl+C      Quit application"),
+        Line::from(""),
+        Line::from(Span::styled("Parameters", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from("  Attack         Envelope attack time (0.001s - 2.0s)"),
+        Line::from("  Decay          Envelope decay time (0.001s - 2.0s)"),
+        Line::from("  Sustain        Envelope sustain level (0.0 - 1.0)"),
+        Line::from("  Release        Envelope release time (0.001s - 5.0s)"),
+        Line::from("  Waveform       Oscillator waveform (Sine/Triangle/Sawtooth/Square)"),
+        Line::from("  Channel        MIDI channel filter (Omni or 1-16)"),
+        Line::from(""),
+        Line::from(Span::styled("Display", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from("  Oscilloscope   Real-time waveform visualization"),
+        Line::from("  Voice Meter    Active voice count (16-voice polyphony)"),
+        Line::from(""),
+        Line::from(Span::styled("Press ? to close this help screen", Style::default().fg(Color::Gray))),
+    ];
+
+    let paragraph = Paragraph::new(help_text)
+        .block(Block::default()
+            .title("Help")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Green)))
+        .alignment(Alignment::Left);
+
+    frame.render_widget(paragraph, frame.size());
 }

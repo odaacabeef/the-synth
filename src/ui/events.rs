@@ -28,6 +28,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             KeyCode::Char('q') => {
                 app.quit();
             }
+            KeyCode::Char('?') => {
+                app.toggle_help();
+            }
             KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') => {
                 app.toggle_device_focus();
             }
@@ -58,6 +61,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         // Quit
         KeyCode::Char('q') => {
             app.quit();
+        }
+
+        // Toggle help
+        KeyCode::Char('?') => {
+            app.toggle_help();
         }
 
         // Go back to device selection
