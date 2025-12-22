@@ -1,4 +1,4 @@
-use crossterm::event::{self, Event, KeyCode, KeyEvent};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use std::time::Duration;
 
 use super::app::{App, AppMode};
@@ -18,14 +18,20 @@ pub fn handle_events(app: &mut App) -> anyhow::Result<()> {
 fn handle_key_event(app: &mut App, key: KeyEvent) {
     // Handle device selection mode
     if app.mode == AppMode::DeviceSelection {
+        // Check for Ctrl+C
+        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('c')) {
+            app.quit();
+            return;
+        }
+
         match key.code {
-            KeyCode::Char('q') | KeyCode::Esc => {
+            KeyCode::Char('q') => {
                 app.quit();
             }
-            KeyCode::Up => {
+            KeyCode::Up | KeyCode::Char('k') => {
                 app.prev_device();
             }
-            KeyCode::Down => {
+            KeyCode::Down | KeyCode::Char('j') => {
                 app.next_device();
             }
             KeyCode::Enter => {
@@ -39,25 +45,31 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
     }
 
     // Handle synthesizer mode
+    // Check for Ctrl+C
+    if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('c')) {
+        app.quit();
+        return;
+    }
+
     match key.code {
         // Quit
-        KeyCode::Char('q') | KeyCode::Esc => {
+        KeyCode::Char('q') => {
             app.quit();
         }
 
-        // Navigate parameters
-        KeyCode::Tab | KeyCode::Right => {
+        // Navigate parameters (vim-style: h=left, l=right)
+        KeyCode::Char('l') | KeyCode::Right => {
             app.next_parameter();
         }
-        KeyCode::Left => {
+        KeyCode::Char('h') | KeyCode::Left => {
             app.prev_parameter();
         }
 
-        // Adjust values
-        KeyCode::Up | KeyCode::Char('+') | KeyCode::Char('=') => {
+        // Adjust values (vim-style: k=up, j=down)
+        KeyCode::Char('k') | KeyCode::Up => {
             app.increase_value();
         }
-        KeyCode::Down | KeyCode::Char('-') | KeyCode::Char('_') => {
+        KeyCode::Char('j') | KeyCode::Down => {
             app.decrease_value();
         }
 

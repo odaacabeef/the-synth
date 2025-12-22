@@ -72,7 +72,7 @@ fn render_device_selection(frame: &mut Frame, app: &App) {
     } else {
         vec![
             Line::from("Controls:"),
-            Line::from("  ↑/↓: Select device  |  Enter: Confirm  |  Q/Esc: Quit"),
+            Line::from("  k/j or ↑/↓: Select device  |  Enter: Confirm  |  q or Ctrl+C: Quit"),
         ]
     };
 
@@ -315,7 +315,7 @@ fn render_oscilloscope(frame: &mut Frame, area: Rect, app: &App) {
 fn render_help(frame: &mut Frame, area: Rect) {
     let help_text = vec![
         Line::from("Controls:"),
-        Line::from("  Tab/←/→: Select parameter  |  ↑/↓ or +/-: Adjust value  |  Q/Esc: Quit"),
+        Line::from("  h/l or ←/→: Select parameter  |  k/j or ↑/↓: Adjust value  |  q or Ctrl+C: Quit"),
     ];
 
     let paragraph = Paragraph::new(help_text)
