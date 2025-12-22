@@ -15,6 +15,12 @@ pub struct SynthParameters {
     pub waveform: AtomicU8,
     /// MIDI channel filter (0-15=specific channel, 255=omni/all channels)
     pub midi_channel: AtomicU8,
+    /// Reverb wet/dry mix (0.0 to 1.0)
+    pub reverb_mix: AtomicF32,
+    /// Reverb room size (0.0 to 1.0)
+    pub reverb_room_size: AtomicF32,
+    /// Reverb damping (0.0 to 1.0)
+    pub reverb_damping: AtomicF32,
 }
 
 impl SynthParameters {
@@ -26,6 +32,9 @@ impl SynthParameters {
             release: AtomicF32::new(0.3),     // 300ms
             waveform: AtomicU8::new(0),       // Sine
             midi_channel: AtomicU8::new(255), // Omni (all channels)
+            reverb_mix: AtomicF32::new(0.0),  // 0% wet (dry)
+            reverb_room_size: AtomicF32::new(0.5), // Medium room
+            reverb_damping: AtomicF32::new(0.5),   // Medium damping
         }
     }
 }

@@ -128,6 +128,7 @@ fn render_synthesizer(frame: &mut Frame, app: &App) {
         .constraints([
             Constraint::Length(3),  // Title
             Constraint::Length(7),  // ADSR controls
+            Constraint::Length(7),  // Reverb controls
             Constraint::Length(5),  // Waveform
             Constraint::Length(4),  // Channel selector
             Constraint::Length(15), // Oscilloscope (13 lines + 2 borders)
@@ -137,10 +138,11 @@ fn render_synthesizer(frame: &mut Frame, app: &App) {
 
     render_title(frame, chunks[0]);
     render_adsr_controls(frame, chunks[1], app);
-    render_waveform_selector(frame, chunks[2], app);
-    render_channel_selector(frame, chunks[3], app);
-    render_oscilloscope(frame, chunks[4], app);
-    render_voice_meter(frame, chunks[5], app);
+    render_reverb_controls(frame, chunks[2], app);
+    render_waveform_selector(frame, chunks[3], app);
+    render_channel_selector(frame, chunks[4], app);
+    render_oscilloscope(frame, chunks[5], app);
+    render_voice_meter(frame, chunks[6], app);
 }
 
 /// Render title bar
@@ -178,6 +180,31 @@ fn render_adsr_controls(frame: &mut Frame, area: Rect, app: &App) {
     render_parameter(frame, param_chunks[1], "Decay", app.decay, 0.001, 2.0, "s", app.selected_param == Parameter::Decay);
     render_parameter(frame, param_chunks[2], "Sustain", app.sustain, 0.0, 1.0, "", app.selected_param == Parameter::Sustain);
     render_parameter(frame, param_chunks[3], "Release", app.release, 0.001, 5.0, "s", app.selected_param == Parameter::Release);
+}
+
+/// Render reverb parameter controls
+fn render_reverb_controls(frame: &mut Frame, area: Rect, app: &App) {
+    let block = Block::default()
+        .title("Reverb")
+        .borders(Borders::ALL)
+        .style(Style::default().fg(Color::White));
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    // Layout for 3 reverb parameters
+    let param_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(33),
+            Constraint::Percentage(33),
+            Constraint::Percentage(34),
+        ])
+        .split(inner);
+
+    render_parameter(frame, param_chunks[0], "Mix", app.reverb_mix, 0.0, 1.0, "", app.selected_param == Parameter::ReverbMix);
+    render_parameter(frame, param_chunks[1], "Room Size", app.reverb_room_size, 0.0, 1.0, "", app.selected_param == Parameter::ReverbRoomSize);
+    render_parameter(frame, param_chunks[2], "Damping", app.reverb_damping, 0.0, 1.0, "", app.selected_param == Parameter::ReverbDamping);
 }
 
 /// Render a single parameter with gauge
@@ -404,6 +431,9 @@ fn render_synthesizer_help(frame: &mut Frame) {
         Line::from("  Release        Envelope release time (0.001s - 5.0s)"),
         Line::from("  Waveform       Oscillator waveform (Sine/Triangle/Sawtooth/Square)"),
         Line::from("  Channel        MIDI channel filter (Omni or 1-16)"),
+        Line::from("  Reverb Mix     Wet/dry mix (0.0 = dry, 1.0 = wet)"),
+        Line::from("  Room Size      Reverb room size (0.0 = small, 1.0 = large)"),
+        Line::from("  Damping        High frequency damping (0.0 = bright, 1.0 = dark)"),
         Line::from(""),
         Line::from(Span::styled("Display", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
         Line::from(""),
