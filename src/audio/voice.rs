@@ -1,4 +1,4 @@
-use super::{envelope::Envelope, oscillator::Oscillator, vca::VCA};
+use crate::dsp::{envelope::Envelope, oscillator::Oscillator, vca::VCA};
 use crate::types::waveform::Waveform;
 
 /// Single synthesizer voice

@@ -1,4 +1,5 @@
 mod audio;
+mod dsp;
 mod midi;
 mod types;
 mod ui;
