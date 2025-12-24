@@ -5,6 +5,7 @@ mod types;
 mod ui;
 
 use anyhow::Result;
+use clap::Parser;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use crossterm::{
     execute,
@@ -19,7 +20,29 @@ use std::{
 
 use audio::{engine::SynthEngine, parameters::SynthParameters};
 use midi::handler::MidiHandler;
-use ui::{app::{App, AppMode}, events, render};
+use ui::{app::App, events, render};
+
+/// A 16-voice polyphonic synthesizer with ADSR envelope
+#[derive(Parser, Debug)]
+#[command(name = "the-synth")]
+#[command(about = "16-voice polyphonic synthesizer", long_about = None)]
+struct Args {
+    /// MIDI input device (index or name)
+    #[arg(short = 'm', long = "midi", required_unless_present = "list_devices")]
+    midi_input: Option<String>,
+
+    /// MIDI channel (1-16 or 'omni' for all channels)
+    #[arg(short = 'c', long = "channel", default_value = "omni")]
+    midi_channel: String,
+
+    /// Audio output device (index or name)
+    #[arg(short = 'a', long = "audio", required_unless_present = "list_devices")]
+    audio_output: Option<String>,
+
+    /// List available devices and exit
+    #[arg(short = 'l', long = "list")]
+    list_devices: bool,
+}
 
 /// List available audio output devices
 fn list_audio_devices() -> Result<Vec<String>> {
@@ -53,10 +76,129 @@ fn list_audio_devices() -> Result<Vec<String>> {
     Ok(devices)
 }
 
+/// Find MIDI device index by name or index string
+fn find_midi_device(devices: &[String], search: &str) -> Result<usize> {
+    // Try to parse as index first
+    if let Ok(index) = search.parse::<usize>() {
+        if index < devices.len() {
+            return Ok(index);
+        } else {
+            return Err(anyhow::anyhow!("MIDI device index {} out of range (0-{})", index, devices.len() - 1));
+        }
+    }
+
+    // Search by name (case-insensitive substring match)
+    let search_lower = search.to_lowercase();
+    for (i, device) in devices.iter().enumerate() {
+        if device.to_lowercase().contains(&search_lower) {
+            return Ok(i);
+        }
+    }
+
+    Err(anyhow::anyhow!("MIDI device '{}' not found", search))
+}
+
+/// Find audio device index by name or index string
+fn find_audio_device(devices: &[String], search: &str) -> Result<usize> {
+    // Try to parse as index first
+    if let Ok(index) = search.parse::<usize>() {
+        if index < devices.len() {
+            return Ok(index);
+        } else {
+            return Err(anyhow::anyhow!("Audio device index {} out of range (0-{})", index, devices.len() - 1));
+        }
+    }
+
+    // Search by name (case-insensitive substring match)
+    let search_lower = search.to_lowercase();
+    for (i, device) in devices.iter().enumerate() {
+        if device.to_lowercase().contains(&search_lower) {
+            return Ok(i);
+        }
+    }
+
+    Err(anyhow::anyhow!("Audio device '{}' not found", search))
+}
+
+/// Parse MIDI channel from string ("omni" or "1"-"16")
+fn parse_midi_channel(channel: &str) -> Result<Option<u8>> {
+    if channel.eq_ignore_ascii_case("omni") || channel.eq_ignore_ascii_case("all") {
+        return Ok(None);
+    }
+
+    let ch = channel.parse::<u8>()
+        .map_err(|_| anyhow::anyhow!("Invalid MIDI channel '{}' (expected 1-16 or 'omni')", channel))?;
+
+    if ch < 1 || ch > 16 {
+        return Err(anyhow::anyhow!("MIDI channel {} out of range (1-16)", ch));
+    }
+
+    // Convert to 0-15 range
+    Ok(Some(ch - 1))
+}
+
 fn main() -> Result<()> {
+    // Parse command line arguments
+    let args = Args::parse();
+
     // List available MIDI and audio devices
     let midi_devices = MidiHandler::list_devices()?;
     let audio_devices = list_audio_devices()?;
+
+    // Handle --list flag
+    if args.list_devices {
+        println!("Available MIDI Input Devices:");
+        for (i, device) in midi_devices.iter().enumerate() {
+            println!("  {}: {}", i, device);
+        }
+        println!("\nAvailable Audio Output Devices:");
+        for (i, device) in audio_devices.iter().enumerate() {
+            println!("  {}: {}", i, device);
+        }
+        return Ok(());
+    }
+
+    // Find selected devices (unwrap is safe because args are required when not listing)
+    let selected_midi_device = find_midi_device(&midi_devices, &args.midi_input.unwrap())?;
+    let selected_audio_device = find_audio_device(&audio_devices, &args.audio_output.unwrap())?;
+    let midi_channel = parse_midi_channel(&args.midi_channel)?;
+
+    // Create shared parameters
+    let parameters = Arc::new(SynthParameters::new());
+
+    // Set MIDI channel in parameters
+    let channel_value = midi_channel.unwrap_or(255);
+    parameters.midi_channel.store(channel_value, std::sync::atomic::Ordering::Relaxed);
+
+    // Create event channels
+    let (event_tx, event_rx) = crossbeam_channel::unbounded();
+    let (voice_tx, voice_rx) = crossbeam_channel::unbounded::<[Option<u8>; 16]>();
+
+    // Connect to selected MIDI device
+    let _midi_handler = MidiHandler::new_with_device(event_tx, selected_midi_device, parameters.clone())?;
+
+    // Initialize audio with selected device
+    let host = cpal::default_host();
+    let device = host
+        .output_devices()?
+        .nth(selected_audio_device)
+        .ok_or_else(|| anyhow::anyhow!("Selected audio device not available"))?;
+
+    let config = device.default_output_config()?;
+
+    // Start audio stream
+    let _stream = match config.sample_format() {
+        cpal::SampleFormat::F32 => {
+            start_audio_stream::<f32>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
+        }
+        cpal::SampleFormat::I16 => {
+            start_audio_stream::<i16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
+        }
+        cpal::SampleFormat::U16 => {
+            start_audio_stream::<u16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
+        }
+        _ => panic!("Unsupported sample format"),
+    };
 
     // Setup terminal
     enable_raw_mode()?;
@@ -65,92 +207,18 @@ fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Create shared parameters
-    let parameters = Arc::new(SynthParameters::new());
+    // Create app (starts in Synthesizer mode)
+    let mut app = App::new(parameters.clone(), midi_channel);
 
-    // Create app with device lists
-    let mut app = App::new(parameters.clone(), midi_devices.clone(), audio_devices.clone());
+    // Run synthesizer UI loop
+    run_ui_loop(&mut terminal, &mut app, voice_rx)?;
 
-    // Main application loop - allows going back to device selection
-    loop {
-        // Device selection loop
-        loop {
-            // Render UI
-            terminal.draw(|f| render::render(f, &app))?;
+    // Restore terminal
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    terminal.show_cursor()?;
 
-            // Handle events
-            events::handle_events(&mut app)?;
-
-            // Check if should quit
-            if app.should_quit {
-                // Restore terminal
-                disable_raw_mode()?;
-                execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-                terminal.show_cursor()?;
-                return Ok(());
-            }
-
-            // Check if device selected
-            if app.mode == AppMode::Synthesizer {
-                break;
-            }
-
-            std::thread::sleep(Duration::from_millis(16));
-        }
-
-        // Get selected device indices
-        let selected_midi_device = app.selected_midi_device;
-        let selected_audio_device = app.selected_audio_device;
-
-        // Create event channels
-        let (event_tx, event_rx) = crossbeam_channel::unbounded();
-        let (voice_tx, voice_rx) = crossbeam_channel::unbounded::<[Option<u8>; 16]>();
-
-        // Connect to selected MIDI device
-        let _midi_handler = MidiHandler::new_with_device(event_tx, selected_midi_device, parameters.clone())?;
-
-        // Initialize audio with selected device
-        let host = cpal::default_host();
-        let device = host
-            .output_devices()?
-            .nth(selected_audio_device)
-            .expect("Selected audio device not available");
-
-        let config = device.default_output_config()?;
-
-        // Start audio stream
-        let _stream = match config.sample_format() {
-            cpal::SampleFormat::F32 => {
-                start_audio_stream::<f32>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
-            }
-            cpal::SampleFormat::I16 => {
-                start_audio_stream::<i16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
-            }
-            cpal::SampleFormat::U16 => {
-                start_audio_stream::<u16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
-            }
-            _ => panic!("Unsupported sample format"),
-        };
-
-        // Run synthesizer UI loop
-        run_ui_loop(&mut terminal, &mut app, voice_rx)?;
-
-        // Check if should quit or go back to device selection
-        if app.should_quit {
-            // Restore terminal
-            disable_raw_mode()?;
-            execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-            terminal.show_cursor()?;
-            return Ok(());
-        }
-
-        // If back_to_device_selection is true, reset flag and loop continues
-        if app.back_to_device_selection {
-            app.back_to_device_selection = false;
-            // Audio stream and MIDI handler will be dropped here, closing connections
-            continue;
-        }
-    }
+    Ok(())
 }
 
 fn start_audio_stream<T>(
@@ -230,8 +298,8 @@ fn run_ui_loop(
         // Handle events
         events::handle_events(app)?;
 
-        // Check if should quit or go back
-        if app.should_quit || app.back_to_device_selection {
+        // Check if should quit
+        if app.should_quit {
             break;
         }
 

@@ -1,7 +1,7 @@
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use std::time::Duration;
 
-use super::app::{App, AppMode};
+use super::app::App;
 
 /// Handle keyboard events and update app state
 pub fn handle_events(app: &mut App) -> anyhow::Result<()> {
@@ -16,44 +16,6 @@ pub fn handle_events(app: &mut App) -> anyhow::Result<()> {
 
 /// Process individual key press
 fn handle_key_event(app: &mut App, key: KeyEvent) {
-    // Handle device selection mode
-    if app.mode == AppMode::DeviceSelection {
-        // Check for Ctrl+C
-        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('c')) {
-            app.quit();
-            return;
-        }
-
-        match key.code {
-            KeyCode::Char('q') => {
-                app.quit();
-            }
-            KeyCode::Char('?') => {
-                app.toggle_help();
-            }
-            KeyCode::Left | KeyCode::Char('h') => {
-                app.prev_device_section();
-            }
-            KeyCode::Right | KeyCode::Char('l') => {
-                app.next_device_section();
-            }
-            KeyCode::Up | KeyCode::Char('k') => {
-                app.prev_device();
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                app.next_device();
-            }
-            KeyCode::Enter => {
-                if !app.midi_devices.is_empty() && !app.audio_devices.is_empty() {
-                    app.confirm_device();
-                }
-            }
-            _ => {}
-        }
-        return;
-    }
-
-    // Handle synthesizer mode
     // Check for Ctrl+C
     if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('c')) {
         app.quit();
@@ -69,11 +31,6 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         // Toggle help
         KeyCode::Char('?') => {
             app.toggle_help();
-        }
-
-        // Go back to device selection
-        KeyCode::Esc => {
-            app.go_back();
         }
 
         // Navigate parameters (vim-style: h=left, l=right)

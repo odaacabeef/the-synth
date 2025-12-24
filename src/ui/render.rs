@@ -2,143 +2,20 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Gauge, List, ListItem, Paragraph},
+    widgets::{Block, Borders, Gauge, Paragraph},
     Frame,
 };
 
-use super::app::{App, AppMode, Parameter, DeviceSelectionFocus};
+use super::app::{App, Parameter};
 
 /// Render the TUI
 pub fn render(frame: &mut Frame, app: &App) {
     // Show help screen if toggled
     if app.show_help {
-        match app.mode {
-            AppMode::DeviceSelection => render_device_selection_help(frame),
-            AppMode::Synthesizer => render_synthesizer_help(frame),
-        }
+        render_synthesizer_help(frame);
     } else {
-        match app.mode {
-            AppMode::DeviceSelection => render_device_selection(frame, app),
-            AppMode::Synthesizer => render_synthesizer(frame, app),
-        }
+        render_synthesizer(frame, app);
     }
-}
-
-/// Render device selection screen
-fn render_device_selection(frame: &mut Frame, app: &App) {
-    // Calculate heights based on number of devices (+3 for borders and title)
-    let midi_height = (app.midi_devices.len() + 3).min(15) as u16; // Cap at 15 lines
-    let audio_height = (app.audio_devices.len() + 3).min(15) as u16; // Cap at 15 lines
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(midi_height), // MIDI devices (sized to content)
-            Constraint::Length(4),           // MIDI channel selector
-            Constraint::Length(audio_height),// Audio devices (sized to content)
-        ])
-        .split(frame.size());
-
-    // MIDI device list
-    let midi_devices: Vec<ListItem> = app
-        .midi_devices
-        .iter()
-        .enumerate()
-        .map(|(i, device)| {
-            let style = if app.device_selection_focus == DeviceSelectionFocus::MidiInput && i == app.selected_midi_device {
-                Style::default()
-                    .fg(Color::Magenta)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::White)
-            };
-            let prefix = if i == app.selected_midi_device {
-                "► "
-            } else {
-                "  "
-            };
-            ListItem::new(format!("{}{}", prefix, device)).style(style)
-        })
-        .collect();
-
-    let midi_title = "MIDI Input";
-    let midi_border_style = if app.device_selection_focus == DeviceSelectionFocus::MidiInput {
-        Style::default().fg(Color::Magenta)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
-
-    let midi_list = List::new(midi_devices).block(
-        Block::default()
-            .title(midi_title)
-            .borders(Borders::ALL)
-            .border_style(midi_border_style),
-    );
-    frame.render_widget(midi_list, chunks[0]);
-
-    // MIDI channel selector
-    let channel_text = match app.midi_channel {
-        None => "MIDI Channel: Omni (All)".to_string(),
-        Some(ch) => format!("MIDI Channel: {}", ch + 1), // Display as 1-16
-    };
-
-    let channel_style = if app.device_selection_focus == DeviceSelectionFocus::MidiChannel {
-        Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::White)
-    };
-
-    let channel_border_style = if app.device_selection_focus == DeviceSelectionFocus::MidiChannel {
-        Style::default().fg(Color::Magenta)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
-
-    let channel_paragraph = Paragraph::new(channel_text)
-        .style(channel_style)
-        .alignment(Alignment::Center)
-        .block(Block::default()
-            .title("MIDI Channel")
-            .borders(Borders::ALL)
-            .border_style(channel_border_style));
-    frame.render_widget(channel_paragraph, chunks[1]);
-
-    // Audio device list
-    let audio_devices: Vec<ListItem> = app
-        .audio_devices
-        .iter()
-        .enumerate()
-        .map(|(i, device)| {
-            let style = if app.device_selection_focus == DeviceSelectionFocus::AudioOutput && i == app.selected_audio_device {
-                Style::default()
-                    .fg(Color::Magenta)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::White)
-            };
-            let prefix = if i == app.selected_audio_device {
-                "► "
-            } else {
-                "  "
-            };
-            ListItem::new(format!("{}{}", prefix, device)).style(style)
-        })
-        .collect();
-
-    let audio_title = "Audio Output";
-    let audio_border_style = if app.device_selection_focus == DeviceSelectionFocus::AudioOutput {
-        Style::default().fg(Color::Magenta)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
-
-    let audio_list = List::new(audio_devices).block(
-        Block::default()
-            .title(audio_title)
-            .borders(Borders::ALL)
-            .border_style(audio_border_style),
-    );
-    frame.render_widget(audio_list, chunks[2]);
 }
 
 /// Render synthesizer screen
@@ -298,38 +175,6 @@ fn render_voice_meter(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(paragraph, inner);
 }
 
-/// Render device selection help screen
-fn render_device_selection_help(frame: &mut Frame) {
-    let help_text = vec![
-        Line::from(""),
-        Line::from(Span::styled("Device Selection - Controls", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-        Line::from(""),
-        Line::from("  h, l, ←, →     Switch between MIDI Input, MIDI Channel, and Audio Output"),
-        Line::from("  k, j, ↑, ↓     Navigate/change selection in the focused section"),
-        Line::from("  Enter          Confirm selection and start synthesizer"),
-        Line::from("  ?              Toggle this help screen"),
-        Line::from("  q, Ctrl+C      Quit application"),
-        Line::from(""),
-        Line::from(Span::styled("Usage", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
-        Line::from(""),
-        Line::from("  1. Use h/l or arrow keys to switch between sections"),
-        Line::from("  2. The focused section has a magenta border"),
-        Line::from("  3. Use k/j or arrow keys to select device or change MIDI channel"),
-        Line::from("  4. Press Enter to confirm and start the synthesizer"),
-        Line::from(""),
-        Line::from(Span::styled("Press ? to close this help screen", Style::default().fg(Color::Gray))),
-    ];
-
-    let paragraph = Paragraph::new(help_text)
-        .block(Block::default()
-            .title("Help")
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Green)))
-        .alignment(Alignment::Left);
-
-    frame.render_widget(paragraph, frame.size());
-}
-
 /// Render synthesizer help screen
 fn render_synthesizer_help(frame: &mut Frame) {
     let help_text = vec![
@@ -342,7 +187,6 @@ fn render_synthesizer_help(frame: &mut Frame) {
         Line::from("  2              Set waveform to Triangle"),
         Line::from("  3              Set waveform to Sawtooth"),
         Line::from("  4              Set waveform to Square"),
-        Line::from("  Esc            Return to device selection screen"),
         Line::from("  ?              Toggle this help screen"),
         Line::from("  q, Ctrl+C      Quit application"),
         Line::from(""),

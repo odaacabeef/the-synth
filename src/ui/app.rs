@@ -2,36 +2,10 @@ use crate::types::waveform::Waveform;
 use std::sync::{atomic::Ordering, Arc};
 use crate::audio::parameters::SynthParameters;
 
-/// Application mode
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AppMode {
-    DeviceSelection,
-    Synthesizer,
-}
-
-/// Device selection focus (which section is currently selected)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DeviceSelectionFocus {
-    MidiInput,
-    MidiChannel,
-    AudioOutput,
-}
 
 /// UI application state
 /// Tracks all editable parameters and UI state
 pub struct App {
-    /// Current application mode
-    pub mode: AppMode,
-    /// Available MIDI input devices
-    pub midi_devices: Vec<String>,
-    /// Selected MIDI device index
-    pub selected_midi_device: usize,
-    /// Available audio output devices
-    pub audio_devices: Vec<String>,
-    /// Selected audio device index
-    pub selected_audio_device: usize,
-    /// Currently focused selection section
-    pub device_selection_focus: DeviceSelectionFocus,
     /// ADSR Attack time (0.001 to 2.0 seconds)
     pub attack: f32,
     /// ADSR Decay time (0.001 to 2.0 seconds)
@@ -50,8 +24,6 @@ pub struct App {
     pub voice_states: [Option<u8>; 16],
     /// Whether to quit the application
     pub should_quit: bool,
-    /// Whether to go back to device selection
-    pub back_to_device_selection: bool,
     /// Whether to show help screen
     pub show_help: bool,
     /// Reference to shared parameters
@@ -68,109 +40,21 @@ pub enum Parameter {
 }
 
 impl App {
-    /// Create new app with default values and device lists
-    pub fn new(parameters: Arc<SynthParameters>, midi_devices: Vec<String>, audio_devices: Vec<String>) -> Self {
+    /// Create new app with default values
+    pub fn new(parameters: Arc<SynthParameters>, midi_channel: Option<u8>) -> Self {
         Self {
-            mode: AppMode::DeviceSelection,
-            midi_devices,
-            selected_midi_device: 0,
-            audio_devices,
-            selected_audio_device: 0,
-            device_selection_focus: DeviceSelectionFocus::MidiInput,
             attack: 0.01,
             decay: 0.1,
             sustain: 0.7,
             release: 0.3,
             waveform: Waveform::Sine,
-            midi_channel: None, // Omni mode by default
+            midi_channel,
             selected_param: Parameter::Attack,
             voice_states: [None; 16],
             should_quit: false,
-            back_to_device_selection: false,
             show_help: false,
             parameters,
         }
-    }
-
-    /// Navigate to next device/option in currently focused section
-    pub fn next_device(&mut self) {
-        match self.device_selection_focus {
-            DeviceSelectionFocus::MidiInput => {
-                if !self.midi_devices.is_empty() {
-                    self.selected_midi_device = (self.selected_midi_device + 1) % self.midi_devices.len();
-                }
-            }
-            DeviceSelectionFocus::MidiChannel => {
-                // Cycle through MIDI channels: Omni -> Ch1 -> Ch2 -> ... -> Ch16 -> Omni
-                self.midi_channel = match self.midi_channel {
-                    None => Some(0),           // Omni -> Ch1
-                    Some(15) => None,          // Ch16 -> Omni
-                    Some(ch) => Some(ch + 1),  // Ch(n) -> Ch(n+1)
-                };
-                self.sync_to_audio();
-            }
-            DeviceSelectionFocus::AudioOutput => {
-                if !self.audio_devices.is_empty() {
-                    self.selected_audio_device = (self.selected_audio_device + 1) % self.audio_devices.len();
-                }
-            }
-        }
-    }
-
-    /// Navigate to previous device/option in currently focused section
-    pub fn prev_device(&mut self) {
-        match self.device_selection_focus {
-            DeviceSelectionFocus::MidiInput => {
-                if !self.midi_devices.is_empty() {
-                    if self.selected_midi_device == 0 {
-                        self.selected_midi_device = self.midi_devices.len() - 1;
-                    } else {
-                        self.selected_midi_device -= 1;
-                    }
-                }
-            }
-            DeviceSelectionFocus::MidiChannel => {
-                // Cycle backwards through MIDI channels
-                self.midi_channel = match self.midi_channel {
-                    None => Some(15),          // Omni -> Ch16
-                    Some(0) => None,           // Ch1 -> Omni
-                    Some(ch) => Some(ch - 1),  // Ch(n) -> Ch(n-1)
-                };
-                self.sync_to_audio();
-            }
-            DeviceSelectionFocus::AudioOutput => {
-                if !self.audio_devices.is_empty() {
-                    if self.selected_audio_device == 0 {
-                        self.selected_audio_device = self.audio_devices.len() - 1;
-                    } else {
-                        self.selected_audio_device -= 1;
-                    }
-                }
-            }
-        }
-    }
-
-    /// Cycle to next device selection section
-    pub fn next_device_section(&mut self) {
-        self.device_selection_focus = match self.device_selection_focus {
-            DeviceSelectionFocus::MidiInput => DeviceSelectionFocus::MidiChannel,
-            DeviceSelectionFocus::MidiChannel => DeviceSelectionFocus::AudioOutput,
-            DeviceSelectionFocus::AudioOutput => DeviceSelectionFocus::MidiInput,
-        };
-    }
-
-    /// Cycle to previous device selection section
-    pub fn prev_device_section(&mut self) {
-        self.device_selection_focus = match self.device_selection_focus {
-            DeviceSelectionFocus::MidiInput => DeviceSelectionFocus::AudioOutput,
-            DeviceSelectionFocus::MidiChannel => DeviceSelectionFocus::MidiInput,
-            DeviceSelectionFocus::AudioOutput => DeviceSelectionFocus::MidiChannel,
-        };
-    }
-
-    /// Confirm device selection and switch to synthesizer mode
-    pub fn confirm_device(&mut self) {
-        self.mode = AppMode::Synthesizer;
     }
 
     /// Cycle to next parameter
@@ -273,13 +157,6 @@ impl App {
     /// Mark app for quit
     pub fn quit(&mut self) {
         self.should_quit = true;
-    }
-
-    /// Go back to device selection screen
-    pub fn go_back(&mut self) {
-        self.back_to_device_selection = true;
-        self.mode = AppMode::DeviceSelection;
-        self.voice_states = [None; 16];
     }
 
     /// Toggle help screen visibility
