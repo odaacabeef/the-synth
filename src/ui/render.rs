@@ -131,7 +131,6 @@ fn render_synthesizer(frame: &mut Frame, app: &App) {
             Constraint::Length(7),  // Reverb controls
             Constraint::Length(5),  // Waveform
             Constraint::Length(4),  // Channel selector
-            Constraint::Length(9),  // Oscilloscope (7 lines + 2 borders)
             Constraint::Length(3),  // Voice meter
         ])
         .split(frame.size());
@@ -141,8 +140,7 @@ fn render_synthesizer(frame: &mut Frame, app: &App) {
     render_reverb_controls(frame, chunks[2], app);
     render_waveform_selector(frame, chunks[3], app);
     render_channel_selector(frame, chunks[4], app);
-    render_oscilloscope(frame, chunks[5], app);
-    render_voice_meter(frame, chunks[6], app);
+    render_voice_meter(frame, chunks[5], app);
 }
 
 /// Render title bar
@@ -328,71 +326,6 @@ fn render_voice_meter(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(gauge, area);
 }
 
-/// Render oscilloscope waveform visualization
-/// 7 lines: Line 3 = 0V, Lines 0-2 = positive, Lines 4-6 = negative
-fn render_oscilloscope(frame: &mut Frame, area: Rect, app: &App) {
-    let block = Block::default()
-        .title("Oscilloscope")
-        .borders(Borders::ALL);
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    if app.waveform_samples.is_empty() {
-        return;
-    }
-
-    let width = inner.width as usize;
-    const HEIGHT: usize = 7; // Fixed 7 lines
-
-    if width == 0 {
-        return;
-    }
-
-    // Create a 2D grid for the waveform (7 lines)
-    let mut grid = vec![vec![' '; width]; HEIGHT];
-
-    // Downsample audio samples to fit width
-    let step = if app.waveform_samples.len() >= width {
-        app.waveform_samples.len() as f32 / width as f32
-    } else {
-        1.0
-    };
-
-    let sample_count = width.min(app.waveform_samples.len());
-
-    // Plot waveform using dots
-    for x in 0..sample_count {
-        let sample_idx = (x as f32 * step) as usize;
-
-        if sample_idx >= app.waveform_samples.len() {
-            break;
-        }
-
-        let sample = app.waveform_samples[sample_idx];
-
-        // Map sample from -1.0..1.0 to line 0..6 (inverted for display)
-        // +1.0 (max positive) -> line 0
-        // 0.0 (zero) -> line 3 (middle)
-        // -1.0 (max negative) -> line 6
-        let line = ((1.0 - sample) * 3.0).clamp(0.0, 6.0).round() as usize;
-
-        // Plot dot
-        grid[line][x] = '.';
-    }
-
-    // Convert grid to lines for rendering
-    let lines: Vec<Line> = grid
-        .iter()
-        .map(|row| {
-            let text: String = row.iter().collect();
-            Line::from(Span::styled(text, Style::default().fg(Color::Green)))
-        })
-        .collect();
-
-    let paragraph = Paragraph::new(lines);
-    frame.render_widget(paragraph, inner);
-}
-
 /// Render device selection help screen
 fn render_device_selection_help(frame: &mut Frame) {
     let help_text = vec![
@@ -455,7 +388,6 @@ fn render_synthesizer_help(frame: &mut Frame) {
         Line::from(""),
         Line::from(Span::styled("Display", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
         Line::from(""),
-        Line::from("  Oscilloscope   Real-time waveform visualization"),
         Line::from("  Voice Meter    Active voice count (16-voice polyphony)"),
         Line::from(""),
         Line::from(Span::styled("Press ? to close this help screen", Style::default().fg(Color::Gray))),
