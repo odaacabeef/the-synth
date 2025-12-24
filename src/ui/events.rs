@@ -49,24 +49,6 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             app.decrease_value();
         }
 
-        // Quick waveform selection
-        KeyCode::Char('1') => {
-            app.waveform = crate::types::waveform::Waveform::Sine;
-            app.parameters.waveform.store(0, std::sync::atomic::Ordering::Relaxed);
-        }
-        KeyCode::Char('2') => {
-            app.waveform = crate::types::waveform::Waveform::Triangle;
-            app.parameters.waveform.store(1, std::sync::atomic::Ordering::Relaxed);
-        }
-        KeyCode::Char('3') => {
-            app.waveform = crate::types::waveform::Waveform::Sawtooth;
-            app.parameters.waveform.store(2, std::sync::atomic::Ordering::Relaxed);
-        }
-        KeyCode::Char('4') => {
-            app.waveform = crate::types::waveform::Waveform::Square;
-            app.parameters.waveform.store(3, std::sync::atomic::Ordering::Relaxed);
-        }
-
         _ => {}
     }
 }
