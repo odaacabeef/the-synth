@@ -44,8 +44,8 @@ pub struct App {
     pub reverb_damping: f32,
     /// Currently selected parameter for editing
     pub selected_param: Parameter,
-    /// Number of active voices (updated from audio thread)
-    pub active_voices: usize,
+    /// Voice states: note number for each of 16 voices (None if idle)
+    pub voice_states: [Option<u8>; 16],
     /// Whether to quit the application
     pub should_quit: bool,
     /// Whether to go back to device selection
@@ -89,7 +89,7 @@ impl App {
             reverb_room_size: 0.5,
             reverb_damping: 0.5,
             selected_param: Parameter::Attack,
-            active_voices: 0,
+            voice_states: [None; 16],
             should_quit: false,
             back_to_device_selection: false,
             show_help: false,
@@ -300,7 +300,7 @@ impl App {
     pub fn go_back(&mut self) {
         self.back_to_device_selection = true;
         self.mode = AppMode::DeviceSelection;
-        self.active_voices = 0;
+        self.voice_states = [None; 16];
     }
 
     /// Toggle help screen visibility

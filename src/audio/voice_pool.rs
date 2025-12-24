@@ -178,9 +178,16 @@ impl VoicePool {
         }
     }
 
-    /// Get count of currently active voices
-    pub fn active_voice_count(&self) -> usize {
-        self.voices.iter().filter(|v| !v.is_idle()).count()
+    /// Get the state of all voices (note number or None)
+    pub fn voice_states(&self) -> [Option<u8>; MAX_VOICES] {
+        let mut states = [None; MAX_VOICES];
+        for (i, pool_voice) in self.voices.iter().enumerate() {
+            states[i] = match pool_voice.state {
+                VoiceState::Active { note } => Some(note),
+                VoiceState::Idle => None,
+            };
+        }
+        states
     }
 }
 
@@ -191,7 +198,8 @@ mod tests {
     #[test]
     fn test_voice_pool_creates() {
         let pool = VoicePool::new(44100.0);
-        assert_eq!(pool.active_voice_count(), 0);
+        let states = pool.voice_states();
+        assert!(states.iter().all(|s| s.is_none()));
     }
 
     #[test]
@@ -199,10 +207,12 @@ mod tests {
         let mut pool = VoicePool::new(44100.0);
 
         pool.note_on(60, 261.63); // Middle C
-        assert_eq!(pool.active_voice_count(), 1);
+        let states = pool.voice_states();
+        assert_eq!(states.iter().filter(|s| s.is_some()).count(), 1);
 
         pool.note_on(64, 329.63); // E
-        assert_eq!(pool.active_voice_count(), 2);
+        let states = pool.voice_states();
+        assert_eq!(states.iter().filter(|s| s.is_some()).count(), 2);
     }
 
     #[test]
@@ -215,6 +225,7 @@ mod tests {
         }
 
         // Should never exceed MAX_VOICES
-        assert!(pool.active_voice_count() <= MAX_VOICES);
+        let states = pool.voice_states();
+        assert!(states.iter().filter(|s| s.is_some()).count() <= MAX_VOICES);
     }
 }

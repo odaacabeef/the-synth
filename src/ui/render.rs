@@ -312,18 +312,47 @@ fn render_channel_selector(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(paragraph, area);
 }
 
-/// Render voice activity meter
+/// Convert MIDI note number to note name (e.g., 60 -> "C4")
+fn midi_note_to_name(note: u8) -> String {
+    const NOTE_NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    let octave = (note / 12) as i32 - 1;
+    let note_name = NOTE_NAMES[(note % 12) as usize];
+    format!("{}{}", note_name, octave)
+}
+
+/// Render voice activity display (16 slots showing note names or "-")
 fn render_voice_meter(frame: &mut Frame, area: Rect, app: &App) {
-    let ratio = app.active_voices as f64 / 16.0;
-    let label = format!("Active Voices: {}/16", app.active_voices);
+    let block = Block::default()
+        .title("Polyphony (16 Voices)")
+        .borders(Borders::ALL);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
 
-    let gauge = Gauge::default()
-        .block(Block::default().title("Polyphony").borders(Borders::ALL))
-        .gauge_style(Style::default().fg(Color::Cyan))
-        .label(label)
-        .ratio(ratio);
+    // Build the voice display string
+    let mut voice_display = String::new();
+    for (i, voice_state) in app.voice_states.iter().enumerate() {
+        if i > 0 {
+            voice_display.push(' ');
+        }
 
-    frame.render_widget(gauge, area);
+        match voice_state {
+            Some(note) => {
+                // Show note name (e.g., "C4", "A#3")
+                let note_name = midi_note_to_name(*note);
+                voice_display.push_str(&note_name);
+            }
+            None => {
+                // Show placeholder with padding to match note name width
+                voice_display.push_str("--");
+            }
+        }
+    }
+
+    let paragraph = Paragraph::new(voice_display)
+        .style(Style::default().fg(Color::Cyan))
+        .alignment(Alignment::Center);
+
+    frame.render_widget(paragraph, inner);
 }
 
 /// Render device selection help screen

@@ -29,9 +29,9 @@ impl SynthEngine {
         }
     }
 
-    /// Get active voice count
-    pub fn active_voice_count(&self) -> usize {
-        self.voice_pool.active_voice_count()
+    /// Get the state of all voices (note number or None for each voice)
+    pub fn voice_states(&self) -> [Option<u8>; 16] {
+        self.voice_pool.voice_states()
     }
 
     /// Process audio callback - fills output buffer with samples

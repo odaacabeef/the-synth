@@ -104,7 +104,7 @@ fn main() -> Result<()> {
 
         // Create event channels
         let (event_tx, event_rx) = crossbeam_channel::unbounded();
-        let (voice_tx, voice_rx) = crossbeam_channel::unbounded();
+        let (voice_tx, voice_rx) = crossbeam_channel::unbounded::<[Option<u8>; 16]>();
 
         // Connect to selected MIDI device
         let _midi_handler = MidiHandler::new_with_device(event_tx, selected_midi_device, parameters.clone())?;
@@ -158,7 +158,7 @@ fn start_audio_stream<T>(
     config: &cpal::StreamConfig,
     parameters: Arc<SynthParameters>,
     event_rx: crossbeam_channel::Receiver<types::events::SynthEvent>,
-    voice_tx: crossbeam_channel::Sender<usize>,
+    voice_tx: crossbeam_channel::Sender<[Option<u8>; 16]>,
 ) -> Result<cpal::Stream>
 where
     T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>,
@@ -196,10 +196,10 @@ where
                 }
             }
 
-            // Periodically send voice count to UI (every ~100ms at 44.1kHz)
+            // Periodically send voice states to UI (every ~100ms at 44.1kHz)
             frame_counter += frames as u64;
             if frame_counter > 4410 {
-                let _ = voice_tx.try_send(engine.active_voice_count());
+                let _ = voice_tx.try_send(engine.voice_states());
                 frame_counter = 0;
             }
         },
@@ -216,12 +216,12 @@ where
 fn run_ui_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut App,
-    voice_rx: crossbeam_channel::Receiver<usize>,
+    voice_rx: crossbeam_channel::Receiver<[Option<u8>; 16]>,
 ) -> Result<()> {
     loop {
-        // Update voice count from audio thread
-        while let Ok(count) = voice_rx.try_recv() {
-            app.active_voices = count;
+        // Update voice states from audio thread
+        while let Ok(states) = voice_rx.try_recv() {
+            app.voice_states = states;
         }
 
         // Render UI
