@@ -2,14 +2,12 @@ use std::sync::{atomic::Ordering, Arc};
 use crossbeam_channel::Receiver;
 
 use super::{voice_pool::VoicePool, parameters::SynthParameters};
-use crate::dsp::reverb::Reverb;
 use crate::types::events::SynthEvent;
 
 /// Core synthesis engine
 /// Runs in real-time audio thread - must be lock-free and allocation-free
 pub struct SynthEngine {
     voice_pool: VoicePool,
-    reverb: Reverb,
     parameters: Arc<SynthParameters>,
     event_rx: Receiver<SynthEvent>,
 }
@@ -23,7 +21,6 @@ impl SynthEngine {
     ) -> Self {
         Self {
             voice_pool: VoicePool::new(sample_rate),
-            reverb: Reverb::new(sample_rate),
             parameters,
             event_rx,
         }
@@ -70,23 +67,8 @@ impl SynthEngine {
         let waveform = crate::types::waveform::Waveform::from_u8(waveform_u8);
         self.voice_pool.set_waveform(waveform);
 
-        // Read reverb parameters
-        let reverb_mix = self.parameters.reverb_mix.load(Ordering::Relaxed);
-        let reverb_room_size = self.parameters.reverb_room_size.load(Ordering::Relaxed);
-        let reverb_damping = self.parameters.reverb_damping.load(Ordering::Relaxed);
-
-        // Update reverb parameters
-        self.reverb.set_mix(reverb_mix);
-        self.reverb.set_room_size(reverb_room_size);
-        self.reverb.set_damping(reverb_damping);
-
         // Process all voices and mix to output
         self.voice_pool.process(output);
-
-        // Apply reverb to each sample
-        for sample in output.iter_mut() {
-            *sample = self.reverb.process(*sample);
-        }
     }
 }
 

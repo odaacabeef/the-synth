@@ -36,12 +36,6 @@ pub struct App {
     pub waveform: Waveform,
     /// MIDI channel filter (None = omni/all channels, Some(0-15) = specific channel)
     pub midi_channel: Option<u8>,
-    /// Reverb wet/dry mix (0.0 to 1.0)
-    pub reverb_mix: f32,
-    /// Reverb room size (0.0 to 1.0)
-    pub reverb_room_size: f32,
-    /// Reverb damping (0.0 to 1.0)
-    pub reverb_damping: f32,
     /// Currently selected parameter for editing
     pub selected_param: Parameter,
     /// Voice states: note number for each of 16 voices (None if idle)
@@ -64,9 +58,6 @@ pub enum Parameter {
     Release,
     Waveform,
     Channel,
-    ReverbMix,
-    ReverbRoomSize,
-    ReverbDamping,
 }
 
 impl App {
@@ -85,9 +76,6 @@ impl App {
             release: 0.3,
             waveform: Waveform::Sine,
             midi_channel: None, // Omni mode by default
-            reverb_mix: 0.0,
-            reverb_room_size: 0.5,
-            reverb_damping: 0.5,
             selected_param: Parameter::Attack,
             voice_states: [None; 16],
             should_quit: false,
@@ -147,10 +135,7 @@ impl App {
             Parameter::Attack => Parameter::Decay,
             Parameter::Decay => Parameter::Sustain,
             Parameter::Sustain => Parameter::Release,
-            Parameter::Release => Parameter::ReverbMix,
-            Parameter::ReverbMix => Parameter::ReverbRoomSize,
-            Parameter::ReverbRoomSize => Parameter::ReverbDamping,
-            Parameter::ReverbDamping => Parameter::Waveform,
+            Parameter::Release => Parameter::Waveform,
             Parameter::Waveform => Parameter::Channel,
             Parameter::Channel => Parameter::Attack,
         };
@@ -163,10 +148,7 @@ impl App {
             Parameter::Decay => Parameter::Attack,
             Parameter::Sustain => Parameter::Decay,
             Parameter::Release => Parameter::Sustain,
-            Parameter::ReverbMix => Parameter::Release,
-            Parameter::ReverbRoomSize => Parameter::ReverbMix,
-            Parameter::ReverbDamping => Parameter::ReverbRoomSize,
-            Parameter::Waveform => Parameter::ReverbDamping,
+            Parameter::Waveform => Parameter::Release,
             Parameter::Channel => Parameter::Waveform,
         };
     }
@@ -205,18 +187,6 @@ impl App {
                     Some(15) => None,          // Ch16 -> Omni
                     Some(ch) => Some(ch + 1),  // Ch(n) -> Ch(n+1)
                 };
-                self.sync_to_audio();
-            }
-            Parameter::ReverbMix => {
-                self.reverb_mix = (self.reverb_mix + 0.05).min(1.0);
-                self.sync_to_audio();
-            }
-            Parameter::ReverbRoomSize => {
-                self.reverb_room_size = (self.reverb_room_size + 0.05).min(1.0);
-                self.sync_to_audio();
-            }
-            Parameter::ReverbDamping => {
-                self.reverb_damping = (self.reverb_damping + 0.05).min(1.0);
                 self.sync_to_audio();
             }
         }
@@ -258,18 +228,6 @@ impl App {
                 };
                 self.sync_to_audio();
             }
-            Parameter::ReverbMix => {
-                self.reverb_mix = (self.reverb_mix - 0.05).max(0.0);
-                self.sync_to_audio();
-            }
-            Parameter::ReverbRoomSize => {
-                self.reverb_room_size = (self.reverb_room_size - 0.05).max(0.0);
-                self.sync_to_audio();
-            }
-            Parameter::ReverbDamping => {
-                self.reverb_damping = (self.reverb_damping - 0.05).max(0.0);
-                self.sync_to_audio();
-            }
         }
     }
 
@@ -284,11 +242,6 @@ impl App {
         // Convert Option<u8> to u8: None = 255 (omni), Some(ch) = ch
         let channel_value = self.midi_channel.unwrap_or(255);
         self.parameters.midi_channel.store(channel_value, Ordering::Relaxed);
-
-        // Reverb parameters
-        self.parameters.reverb_mix.store(self.reverb_mix, Ordering::Relaxed);
-        self.parameters.reverb_room_size.store(self.reverb_room_size, Ordering::Relaxed);
-        self.parameters.reverb_damping.store(self.reverb_damping, Ordering::Relaxed);
     }
 
     /// Mark app for quit
