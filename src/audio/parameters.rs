@@ -22,8 +22,8 @@ impl SynthParameters {
         Self {
             attack: AtomicF32::new(0.01),     // 10ms
             decay: AtomicF32::new(0.1),       // 100ms
-            sustain: AtomicF32::new(0.7),     // 70%
-            release: AtomicF32::new(0.3),     // 300ms
+            sustain: AtomicF32::new(0.4),     // 40%
+            release: AtomicF32::new(0.1),     // 100ms
             waveform: AtomicU8::new(0),       // Sine
             midi_channel: AtomicU8::new(255), // Omni (all channels)
         }

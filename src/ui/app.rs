@@ -45,8 +45,8 @@ impl App {
         Self {
             attack: 0.01,
             decay: 0.1,
-            sustain: 0.7,
-            release: 0.3,
+            sustain: 0.4,
+            release: 0.1,
             waveform: Waveform::Sine,
             midi_channel,
             selected_param: Parameter::Attack,
