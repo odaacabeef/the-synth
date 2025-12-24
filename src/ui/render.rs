@@ -44,31 +44,25 @@ fn render_synthesizer(frame: &mut Frame, app: &App) {
     // Blank line
     lines.push(Line::from(""));
 
-    // Voice states (first 8 voices)
-    let mut voice_line1 = String::from("  ");
-    for i in 0..8 {
-        if i > 0 {
-            voice_line1.push(' ');
+    // Voice states (4 rows of 4 voices each)
+    for row in 0..4 {
+        let mut voice_line = String::from("  ");
+        for col in 0..4 {
+            if col > 0 {
+                voice_line.push(' ');
+            }
+            let voice_idx = row * 4 + col;
+            match app.voice_states[voice_idx] {
+                Some(note) => {
+                    let note_name = midi_note_to_name(note);
+                    // Pad to 3 characters
+                    voice_line.push_str(&format!("{:3}", note_name));
+                }
+                None => voice_line.push_str("---"),
+            }
         }
-        match app.voice_states[i] {
-            Some(note) => voice_line1.push_str(&midi_note_to_name(note)),
-            None => voice_line1.push_str("--"),
-        }
+        lines.push(Line::from(voice_line));
     }
-    lines.push(Line::from(voice_line1));
-
-    // Voice states (last 8 voices)
-    let mut voice_line2 = String::from("  ");
-    for i in 8..16 {
-        if i > 8 {
-            voice_line2.push(' ');
-        }
-        match app.voice_states[i] {
-            Some(note) => voice_line2.push_str(&midi_note_to_name(note)),
-            None => voice_line2.push_str("--"),
-        }
-    }
-    lines.push(Line::from(voice_line2));
 
     // Render as a simple paragraph
     let paragraph = Paragraph::new(lines);
