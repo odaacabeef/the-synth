@@ -9,6 +9,14 @@ pub enum AppMode {
     Synthesizer,
 }
 
+/// Device selection focus (which section is currently selected)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceSelectionFocus {
+    MidiInput,
+    MidiChannel,
+    AudioOutput,
+}
+
 /// UI application state
 /// Tracks all editable parameters and UI state
 pub struct App {
@@ -22,8 +30,8 @@ pub struct App {
     pub audio_devices: Vec<String>,
     /// Selected audio device index
     pub selected_audio_device: usize,
-    /// Currently focused selection (true = MIDI, false = Audio)
-    pub selecting_midi: bool,
+    /// Currently focused selection section
+    pub device_selection_focus: DeviceSelectionFocus,
     /// ADSR Attack time (0.001 to 2.0 seconds)
     pub attack: f32,
     /// ADSR Decay time (0.001 to 2.0 seconds)
@@ -57,7 +65,6 @@ pub enum Parameter {
     Sustain,
     Release,
     Waveform,
-    Channel,
 }
 
 impl App {
@@ -69,7 +76,7 @@ impl App {
             selected_midi_device: 0,
             audio_devices,
             selected_audio_device: 0,
-            selecting_midi: true, // Start with MIDI selection focused
+            device_selection_focus: DeviceSelectionFocus::MidiInput,
             attack: 0.01,
             decay: 0.1,
             sustain: 0.7,
@@ -85,43 +92,80 @@ impl App {
         }
     }
 
-    /// Navigate to next device in currently focused list
+    /// Navigate to next device/option in currently focused section
     pub fn next_device(&mut self) {
-        if self.selecting_midi {
-            if !self.midi_devices.is_empty() {
-                self.selected_midi_device = (self.selected_midi_device + 1) % self.midi_devices.len();
+        match self.device_selection_focus {
+            DeviceSelectionFocus::MidiInput => {
+                if !self.midi_devices.is_empty() {
+                    self.selected_midi_device = (self.selected_midi_device + 1) % self.midi_devices.len();
+                }
             }
-        } else {
-            if !self.audio_devices.is_empty() {
-                self.selected_audio_device = (self.selected_audio_device + 1) % self.audio_devices.len();
+            DeviceSelectionFocus::MidiChannel => {
+                // Cycle through MIDI channels: Omni -> Ch1 -> Ch2 -> ... -> Ch16 -> Omni
+                self.midi_channel = match self.midi_channel {
+                    None => Some(0),           // Omni -> Ch1
+                    Some(15) => None,          // Ch16 -> Omni
+                    Some(ch) => Some(ch + 1),  // Ch(n) -> Ch(n+1)
+                };
+                self.sync_to_audio();
+            }
+            DeviceSelectionFocus::AudioOutput => {
+                if !self.audio_devices.is_empty() {
+                    self.selected_audio_device = (self.selected_audio_device + 1) % self.audio_devices.len();
+                }
             }
         }
     }
 
-    /// Navigate to previous device in currently focused list
+    /// Navigate to previous device/option in currently focused section
     pub fn prev_device(&mut self) {
-        if self.selecting_midi {
-            if !self.midi_devices.is_empty() {
-                if self.selected_midi_device == 0 {
-                    self.selected_midi_device = self.midi_devices.len() - 1;
-                } else {
-                    self.selected_midi_device -= 1;
+        match self.device_selection_focus {
+            DeviceSelectionFocus::MidiInput => {
+                if !self.midi_devices.is_empty() {
+                    if self.selected_midi_device == 0 {
+                        self.selected_midi_device = self.midi_devices.len() - 1;
+                    } else {
+                        self.selected_midi_device -= 1;
+                    }
                 }
             }
-        } else {
-            if !self.audio_devices.is_empty() {
-                if self.selected_audio_device == 0 {
-                    self.selected_audio_device = self.audio_devices.len() - 1;
-                } else {
-                    self.selected_audio_device -= 1;
+            DeviceSelectionFocus::MidiChannel => {
+                // Cycle backwards through MIDI channels
+                self.midi_channel = match self.midi_channel {
+                    None => Some(15),          // Omni -> Ch16
+                    Some(0) => None,           // Ch1 -> Omni
+                    Some(ch) => Some(ch - 1),  // Ch(n) -> Ch(n-1)
+                };
+                self.sync_to_audio();
+            }
+            DeviceSelectionFocus::AudioOutput => {
+                if !self.audio_devices.is_empty() {
+                    if self.selected_audio_device == 0 {
+                        self.selected_audio_device = self.audio_devices.len() - 1;
+                    } else {
+                        self.selected_audio_device -= 1;
+                    }
                 }
             }
         }
     }
 
-    /// Toggle between MIDI and audio device selection
-    pub fn toggle_device_focus(&mut self) {
-        self.selecting_midi = !self.selecting_midi;
+    /// Cycle to next device selection section
+    pub fn next_device_section(&mut self) {
+        self.device_selection_focus = match self.device_selection_focus {
+            DeviceSelectionFocus::MidiInput => DeviceSelectionFocus::MidiChannel,
+            DeviceSelectionFocus::MidiChannel => DeviceSelectionFocus::AudioOutput,
+            DeviceSelectionFocus::AudioOutput => DeviceSelectionFocus::MidiInput,
+        };
+    }
+
+    /// Cycle to previous device selection section
+    pub fn prev_device_section(&mut self) {
+        self.device_selection_focus = match self.device_selection_focus {
+            DeviceSelectionFocus::MidiInput => DeviceSelectionFocus::AudioOutput,
+            DeviceSelectionFocus::MidiChannel => DeviceSelectionFocus::MidiInput,
+            DeviceSelectionFocus::AudioOutput => DeviceSelectionFocus::MidiChannel,
+        };
     }
 
     /// Confirm device selection and switch to synthesizer mode
@@ -136,20 +180,18 @@ impl App {
             Parameter::Decay => Parameter::Sustain,
             Parameter::Sustain => Parameter::Release,
             Parameter::Release => Parameter::Waveform,
-            Parameter::Waveform => Parameter::Channel,
-            Parameter::Channel => Parameter::Attack,
+            Parameter::Waveform => Parameter::Attack,
         };
     }
 
     /// Cycle to previous parameter
     pub fn prev_parameter(&mut self) {
         self.selected_param = match self.selected_param {
-            Parameter::Attack => Parameter::Channel,
+            Parameter::Attack => Parameter::Waveform,
             Parameter::Decay => Parameter::Attack,
             Parameter::Sustain => Parameter::Decay,
             Parameter::Release => Parameter::Sustain,
             Parameter::Waveform => Parameter::Release,
-            Parameter::Channel => Parameter::Waveform,
         };
     }
 
@@ -181,14 +223,6 @@ impl App {
                 };
                 self.sync_to_audio();
             }
-            Parameter::Channel => {
-                self.midi_channel = match self.midi_channel {
-                    None => Some(0),           // Omni -> Ch1
-                    Some(15) => None,          // Ch16 -> Omni
-                    Some(ch) => Some(ch + 1),  // Ch(n) -> Ch(n+1)
-                };
-                self.sync_to_audio();
-            }
         }
     }
 
@@ -217,14 +251,6 @@ impl App {
                     Waveform::Triangle => Waveform::Sine,
                     Waveform::Sawtooth => Waveform::Triangle,
                     Waveform::Square => Waveform::Sawtooth,
-                };
-                self.sync_to_audio();
-            }
-            Parameter::Channel => {
-                self.midi_channel = match self.midi_channel {
-                    None => Some(15),          // Omni -> Ch16
-                    Some(0) => None,           // Ch1 -> Omni
-                    Some(ch) => Some(ch - 1),  // Ch(n) -> Ch(n-1)
                 };
                 self.sync_to_audio();
             }

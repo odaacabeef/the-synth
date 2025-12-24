@@ -31,8 +31,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             KeyCode::Char('?') => {
                 app.toggle_help();
             }
-            KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') => {
-                app.toggle_device_focus();
+            KeyCode::Left | KeyCode::Char('h') => {
+                app.prev_device_section();
+            }
+            KeyCode::Right | KeyCode::Char('l') => {
+                app.next_device_section();
             }
             KeyCode::Up | KeyCode::Char('k') => {
                 app.prev_device();
