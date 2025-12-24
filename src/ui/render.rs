@@ -33,19 +33,11 @@ fn render_device_selection(frame: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),           // Title
             Constraint::Length(midi_height), // MIDI devices (sized to content)
             Constraint::Length(4),           // MIDI channel selector
             Constraint::Length(audio_height),// Audio devices (sized to content)
         ])
         .split(frame.size());
-
-    // Title
-    let title = Paragraph::new("The Synth - Device Selection")
-        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL));
-    frame.render_widget(title, chunks[0]);
 
     // MIDI device list
     let midi_devices: Vec<ListItem> = app
@@ -82,7 +74,7 @@ fn render_device_selection(frame: &mut Frame, app: &App) {
             .borders(Borders::ALL)
             .border_style(midi_border_style),
     );
-    frame.render_widget(midi_list, chunks[1]);
+    frame.render_widget(midi_list, chunks[0]);
 
     // MIDI channel selector
     let channel_text = match app.midi_channel {
@@ -109,7 +101,7 @@ fn render_device_selection(frame: &mut Frame, app: &App) {
             .title("MIDI Channel")
             .borders(Borders::ALL)
             .border_style(channel_border_style));
-    frame.render_widget(channel_paragraph, chunks[2]);
+    frame.render_widget(channel_paragraph, chunks[1]);
 
     // Audio device list
     let audio_devices: Vec<ListItem> = app
@@ -146,7 +138,7 @@ fn render_device_selection(frame: &mut Frame, app: &App) {
             .borders(Borders::ALL)
             .border_style(audio_border_style),
     );
-    frame.render_widget(audio_list, chunks[3]);
+    frame.render_widget(audio_list, chunks[2]);
 }
 
 /// Render synthesizer screen
@@ -154,27 +146,15 @@ fn render_synthesizer(frame: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Title
             Constraint::Length(7),  // ADSR controls
             Constraint::Length(5),  // Waveform
             Constraint::Length(3),  // Voice meter
         ])
         .split(frame.size());
 
-    render_title(frame, chunks[0]);
-    render_adsr_controls(frame, chunks[1], app);
-    render_waveform_selector(frame, chunks[2], app);
-    render_voice_meter(frame, chunks[3], app);
-}
-
-/// Render title bar
-fn render_title(frame: &mut Frame, area: Rect) {
-    let title = Paragraph::new("The Synth - 16-Voice Polyphonic Synthesizer")
-        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL));
-
-    frame.render_widget(title, area);
+    render_adsr_controls(frame, chunks[0], app);
+    render_waveform_selector(frame, chunks[1], app);
+    render_voice_meter(frame, chunks[2], app);
 }
 
 /// Render ADSR parameter controls
