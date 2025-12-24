@@ -1,8 +1,6 @@
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Gauge, Paragraph},
+    text::Line,
+    widgets::Paragraph,
     Frame,
 };
 
@@ -20,116 +18,61 @@ pub fn render(frame: &mut Frame, app: &App) {
 
 /// Render synthesizer screen
 fn render_synthesizer(frame: &mut Frame, app: &App) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(7),  // ADSR controls
-            Constraint::Length(5),  // Waveform
-            Constraint::Length(3),  // Voice meter
-        ])
-        .split(frame.size());
+    // Build the UI as simple text lines
+    let mut lines = Vec::new();
 
-    render_adsr_controls(frame, chunks[0], app);
-    render_waveform_selector(frame, chunks[1], app);
-    render_voice_meter(frame, chunks[2], app);
-}
+    // ADSR parameters
+    let cursor_attack = if app.selected_param == Parameter::Attack { ">" } else { " " };
+    lines.push(Line::from(format!("{} Attack:  {:.3}s", cursor_attack, app.attack)));
 
-/// Render ADSR parameter controls
-fn render_adsr_controls(frame: &mut Frame, area: Rect, app: &App) {
-    let is_active = matches!(app.selected_param,
-        Parameter::Attack | Parameter::Decay | Parameter::Sustain | Parameter::Release);
-    let border_color = if is_active { Color::Magenta } else { Color::DarkGray };
+    let cursor_decay = if app.selected_param == Parameter::Decay { ">" } else { " " };
+    lines.push(Line::from(format!("{} Decay:   {:.3}s", cursor_decay, app.decay)));
 
-    let block = Block::default()
-        .title("ADSR Envelope")
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color));
+    let cursor_sustain = if app.selected_param == Parameter::Sustain { ">" } else { " " };
+    lines.push(Line::from(format!("{} Sustain: {:.2}", cursor_sustain, app.sustain)));
 
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let cursor_release = if app.selected_param == Parameter::Release { ">" } else { " " };
+    lines.push(Line::from(format!("{} Release: {:.3}s", cursor_release, app.release)));
 
-    // Layout for 4 parameters
-    let param_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-        ])
-        .split(inner);
+    // Blank line
+    lines.push(Line::from(""));
 
-    render_parameter(frame, param_chunks[0], "Attack", app.attack, 0.001, 2.0, "s", app.selected_param == Parameter::Attack);
-    render_parameter(frame, param_chunks[1], "Decay", app.decay, 0.001, 2.0, "s", app.selected_param == Parameter::Decay);
-    render_parameter(frame, param_chunks[2], "Sustain", app.sustain, 0.0, 1.0, "", app.selected_param == Parameter::Sustain);
-    render_parameter(frame, param_chunks[3], "Release", app.release, 0.001, 5.0, "s", app.selected_param == Parameter::Release);
-}
+    // Waveform
+    let cursor_waveform = if app.selected_param == Parameter::Waveform { ">" } else { " " };
+    lines.push(Line::from(format!("{} Waveform: {:?}", cursor_waveform, app.waveform)));
 
-/// Render a single parameter with gauge
-fn render_parameter(
-    frame: &mut Frame,
-    area: Rect,
-    name: &str,
-    value: f32,
-    min: f32,
-    max: f32,
-    unit: &str,
-    selected: bool,
-) {
-    let ratio = ((value - min) / (max - min)).clamp(0.0, 1.0);
+    // Blank line
+    lines.push(Line::from(""));
 
-    let color = if selected { Color::Magenta } else { Color::DarkGray };
-    let style = if selected {
-        Style::default().fg(color).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(color)
-    };
+    // Voice states (first 8 voices)
+    let mut voice_line1 = String::from("  ");
+    for i in 0..8 {
+        if i > 0 {
+            voice_line1.push(' ');
+        }
+        match app.voice_states[i] {
+            Some(note) => voice_line1.push_str(&midi_note_to_name(note)),
+            None => voice_line1.push_str("--"),
+        }
+    }
+    lines.push(Line::from(voice_line1));
 
-    // Label with value
-    let label = if unit.is_empty() {
-        format!("{}: {:.2}", name, value)
-    } else {
-        format!("{}: {:.3}{}", name, value, unit)
-    };
+    // Voice states (last 8 voices)
+    let mut voice_line2 = String::from("  ");
+    for i in 8..16 {
+        if i > 8 {
+            voice_line2.push(' ');
+        }
+        match app.voice_states[i] {
+            Some(note) => voice_line2.push_str(&midi_note_to_name(note)),
+            None => voice_line2.push_str("--"),
+        }
+    }
+    lines.push(Line::from(voice_line2));
 
-    let gauge = Gauge::default()
-        .block(Block::default())
-        .gauge_style(style)
-        .label(label)
-        .ratio(ratio as f64);
-
-    frame.render_widget(gauge, area);
-}
-
-/// Render waveform selector
-fn render_waveform_selector(frame: &mut Frame, area: Rect, app: &App) {
-    let selected = app.selected_param == Parameter::Waveform;
-    let color = if selected { Color::Magenta } else { Color::DarkGray };
-
-    let waveform_text = format!("Waveform: {:?}", app.waveform);
-
-    let style = if selected {
-        Style::default().fg(color).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(color)
-    };
-
-    let waveforms = vec![
-        Line::from(Span::styled(waveform_text, style)),
-        Line::from(""),
-        Line::from("Quick select: 1=Sine 2=Triangle 3=Sawtooth 4=Square"),
-    ];
-
-    let border_color = if selected { Color::Magenta } else { Color::DarkGray };
-
-    let paragraph = Paragraph::new(waveforms)
-        .block(Block::default()
-            .title("Waveform")
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(border_color)))
-        .alignment(Alignment::Center);
-
-    frame.render_widget(paragraph, area);
+    // Render as a simple paragraph
+    let paragraph = Paragraph::new(lines);
+    frame.render_widget(paragraph, frame.size());
 }
 
 /// Convert MIDI note number to note name (e.g., 60 -> "C4")
@@ -140,49 +83,14 @@ fn midi_note_to_name(note: u8) -> String {
     format!("{}{}", note_name, octave)
 }
 
-/// Render voice activity display (16 slots showing note names or "-")
-fn render_voice_meter(frame: &mut Frame, area: Rect, app: &App) {
-    let block = Block::default()
-        .title("Polyphony (16 Voices)")
-        .borders(Borders::ALL);
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    // Build the voice display string
-    let mut voice_display = String::new();
-    for (i, voice_state) in app.voice_states.iter().enumerate() {
-        if i > 0 {
-            voice_display.push(' ');
-        }
-
-        match voice_state {
-            Some(note) => {
-                // Show note name (e.g., "C4", "A#3")
-                let note_name = midi_note_to_name(*note);
-                voice_display.push_str(&note_name);
-            }
-            None => {
-                // Show placeholder with padding to match note name width
-                voice_display.push_str("--");
-            }
-        }
-    }
-
-    let paragraph = Paragraph::new(voice_display)
-        .style(Style::default().fg(Color::Cyan))
-        .alignment(Alignment::Center);
-
-    frame.render_widget(paragraph, inner);
-}
-
 /// Render synthesizer help screen
 fn render_synthesizer_help(frame: &mut Frame) {
     let help_text = vec![
         Line::from(""),
-        Line::from(Span::styled("Synthesizer - Controls", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+        Line::from("Controls"),
         Line::from(""),
-        Line::from("  h, l, ←, →     Navigate between parameters (Attack/Decay/Sustain/Release/Waveform)"),
-        Line::from("  k, j, ↑, ↓     Adjust the selected parameter value"),
+        Line::from("  h, l, ←, →     Adjust the selected parameter value"),
+        Line::from("  j, k, ↑, ↓     Move cursor between parameters"),
         Line::from("  1              Set waveform to Sine"),
         Line::from("  2              Set waveform to Triangle"),
         Line::from("  3              Set waveform to Sawtooth"),
@@ -190,27 +98,9 @@ fn render_synthesizer_help(frame: &mut Frame) {
         Line::from("  ?              Toggle this help screen"),
         Line::from("  q, Ctrl+C      Quit application"),
         Line::from(""),
-        Line::from(Span::styled("Parameters", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
-        Line::from(""),
-        Line::from("  Attack         Envelope attack time (0.001s - 2.0s)"),
-        Line::from("  Decay          Envelope decay time (0.001s - 2.0s)"),
-        Line::from("  Sustain        Envelope sustain level (0.0 - 1.0)"),
-        Line::from("  Release        Envelope release time (0.001s - 5.0s)"),
-        Line::from("  Waveform       Oscillator waveform (Sine/Triangle/Sawtooth/Square)"),
-        Line::from(""),
-        Line::from(Span::styled("Display", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
-        Line::from(""),
-        Line::from("  Voice Meter    Active voice count (16-voice polyphony)"),
-        Line::from(""),
-        Line::from(Span::styled("Press ? to close this help screen", Style::default().fg(Color::Gray))),
+        Line::from("Press ? to close this help screen"),
     ];
 
-    let paragraph = Paragraph::new(help_text)
-        .block(Block::default()
-            .title("Help")
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Green)))
-        .alignment(Alignment::Left);
-
+    let paragraph = Paragraph::new(help_text);
     frame.render_widget(paragraph, frame.size());
 }

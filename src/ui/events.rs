@@ -33,19 +33,19 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             app.toggle_help();
         }
 
-        // Navigate parameters (vim-style: h=left, l=right)
-        KeyCode::Char('l') | KeyCode::Right => {
+        // Navigate parameters (vim-style: j=down, k=up)
+        KeyCode::Char('j') | KeyCode::Down => {
             app.next_parameter();
         }
-        KeyCode::Char('h') | KeyCode::Left => {
+        KeyCode::Char('k') | KeyCode::Up => {
             app.prev_parameter();
         }
 
-        // Adjust values (vim-style: k=up, j=down)
-        KeyCode::Char('k') | KeyCode::Up => {
+        // Adjust values (vim-style: l=right, h=left)
+        KeyCode::Char('l') | KeyCode::Right => {
             app.increase_value();
         }
-        KeyCode::Char('j') | KeyCode::Down => {
+        KeyCode::Char('h') | KeyCode::Left => {
             app.decrease_value();
         }
 
