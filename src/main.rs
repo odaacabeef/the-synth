@@ -28,16 +28,20 @@ use ui::{app::App, events, render};
 #[command(about = "16-voice polyphonic synthesizer", long_about = None)]
 struct Args {
     /// MIDI input device (index or name)
-    #[arg(short = 'm', long = "midi", required_unless_present = "list_devices")]
+    #[arg(short = 'm', long = "midi-device", required_unless_present = "list_devices")]
     midi_input: Option<String>,
 
     /// MIDI channel (1-16 or 'omni' for all channels)
-    #[arg(short = 'c', long = "channel", default_value = "omni")]
+    #[arg(long = "midi-channel", default_value = "omni")]
     midi_channel: String,
 
     /// Audio output device (index or name)
-    #[arg(short = 'a', long = "audio", required_unless_present = "list_devices")]
+    #[arg(short = 'a', long = "audio-device", required_unless_present = "list_devices")]
     audio_output: Option<String>,
+
+    /// Audio output channels (e.g., "0" for left, "1" for right, "0,1" for stereo)
+    #[arg(long = "audio-channels", default_value = "0")]
+    channels: String,
 
     /// List available devices and exit
     #[arg(short = 'l', long = "list")]
@@ -137,6 +141,33 @@ fn parse_midi_channel(channel: &str) -> Result<Option<u8>> {
     Ok(Some(ch - 1))
 }
 
+/// Parse output channels specification ("all" or comma-separated channel indices like "0" or "0,1")
+fn parse_output_channels(channels_str: &str, device_channels: usize) -> Result<Vec<usize>> {
+    if channels_str.eq_ignore_ascii_case("all") {
+        return Ok((0..device_channels).collect());
+    }
+
+    let mut channels = Vec::new();
+    for ch_str in channels_str.split(',') {
+        let ch_str = ch_str.trim();
+        let ch = ch_str.parse::<usize>()
+            .map_err(|_| anyhow::anyhow!("Invalid channel '{}' (expected number or 'all')", ch_str))?;
+
+        if ch >= device_channels {
+            return Err(anyhow::anyhow!("Channel {} out of range (device has {} channels: 0-{})",
+                ch, device_channels, device_channels - 1));
+        }
+
+        channels.push(ch);
+    }
+
+    if channels.is_empty() {
+        return Err(anyhow::anyhow!("No channels specified"));
+    }
+
+    Ok(channels)
+}
+
 fn main() -> Result<()> {
     // Parse command line arguments
     let args = Args::parse();
@@ -186,16 +217,19 @@ fn main() -> Result<()> {
 
     let config = device.default_output_config()?;
 
+    // Parse output channels
+    let output_channels = parse_output_channels(&args.channels, config.channels() as usize)?;
+
     // Start audio stream
     let _stream = match config.sample_format() {
         cpal::SampleFormat::F32 => {
-            start_audio_stream::<f32>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
+            start_audio_stream::<f32>(&device, &config.into(), parameters.clone(), event_rx, voice_tx, output_channels)?
         }
         cpal::SampleFormat::I16 => {
-            start_audio_stream::<i16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
+            start_audio_stream::<i16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx, output_channels)?
         }
         cpal::SampleFormat::U16 => {
-            start_audio_stream::<u16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx)?
+            start_audio_stream::<u16>(&device, &config.into(), parameters.clone(), event_rx, voice_tx, output_channels)?
         }
         _ => panic!("Unsupported sample format"),
     };
@@ -227,6 +261,7 @@ fn start_audio_stream<T>(
     parameters: Arc<SynthParameters>,
     event_rx: crossbeam_channel::Receiver<types::events::SynthEvent>,
     voice_tx: crossbeam_channel::Sender<[Option<u8>; 16]>,
+    output_channels: Vec<usize>,
 ) -> Result<cpal::Stream>
 where
     T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>,
@@ -256,11 +291,15 @@ where
             // Process audio (generate samples)
             engine.process(&mut temp_buffer[..frames]);
 
-            // Convert and write to output (duplicate for all channels)
+            // Write to specified output channels only
             for (frame_idx, frame) in data.chunks_mut(channels).enumerate() {
                 let sample = temp_buffer[frame_idx];
-                for channel_sample in frame.iter_mut() {
-                    *channel_sample = T::from_sample(sample);
+                for (channel_idx, channel_sample) in frame.iter_mut().enumerate() {
+                    if output_channels.contains(&channel_idx) {
+                        *channel_sample = T::from_sample(sample);
+                    } else {
+                        *channel_sample = T::from_sample(0.0);
+                    }
                 }
             }
 

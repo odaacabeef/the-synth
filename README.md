@@ -13,16 +13,19 @@ cargo run -- --list
 Run the synth with your devices:
 ```sh
 # By device index
-cargo run -- --midi 0 --audio 0
+cargo run -- --midi-device 0 --audio-device 0
 
 # By device name (substring match)
-cargo run -- --midi "beefdown" --audio "MacBook"
+cargo run -- --midi-device "beefdown" --audio-device "MacBook"
 
 # With specific MIDI channel
-cargo run -- --midi 0 --audio 0 --channel 5
+cargo run -- --midi-device 0 --audio-device 0 --midi-channel 5
 
-# Omni mode (all MIDI channels, default)
-cargo run -- --midi 0 --audio 0 --channel omni
+# Output to multiple audio channels
+cargo run -- --midi-device 0 --audio-device 0 --audio-channels 0,1
+
+# Output to all audio channels
+cargo run -- --midi-device 0 --audio-device 0 --audio-channels all
 ```
 
 ## Interface
