@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use crossbeam_channel::Sender;
 use midir::{MidiInput, MidiInputConnection};
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::Arc;
 
 use super::message::MidiMessage;
 use crate::audio::parameters::SynthParameters;
@@ -18,7 +18,7 @@ impl MidiHandler {
     pub fn new_with_device(
         event_tx: Sender<SynthEvent>,
         device_index: usize,
-        parameters: Arc<SynthParameters>,
+        _parameters: Arc<SynthParameters>,
     ) -> Result<Self> {
         let midi_in = MidiInput::new("the-synth-input")?;
         let ports = midi_in.ports();
@@ -38,11 +38,8 @@ impl MidiHandler {
                     // Parse MIDI message
                     let message = MidiMessage::parse(bytes);
 
-                    // Read channel filter from parameters
-                    let channel_filter = parameters.midi_channel.load(Ordering::Relaxed);
-
-                    // Convert to synth event with channel filtering
-                    if let Some(event) = message.to_synth_event(channel_filter) {
+                    // Convert to synth event (channel filtering happens at engine level)
+                    if let Some(event) = message.to_synth_event() {
                         // Use try_send to avoid blocking MIDI thread
                         let _ = event_tx.try_send(event);
                     }
@@ -59,7 +56,7 @@ impl MidiHandler {
     /// Connect to MIDI input device and start receiving messages
     /// Auto-selects first available device (legacy method)
     #[allow(dead_code)]
-    pub fn new(event_tx: Sender<SynthEvent>, parameters: Arc<SynthParameters>) -> Result<Self> {
+    pub fn new(event_tx: Sender<SynthEvent>, _parameters: Arc<SynthParameters>) -> Result<Self> {
         let midi_in = MidiInput::new("the-synth-input")?;
 
         // Get available MIDI input ports
@@ -67,14 +64,6 @@ impl MidiHandler {
 
         if ports.is_empty() {
             return Err(anyhow!("No MIDI input devices found"));
-        }
-
-        // List available ports
-        println!("\nAvailable MIDI input devices:");
-        for (i, port) in ports.iter().enumerate() {
-            if let Ok(name) = midi_in.port_name(port) {
-                println!("  [{}] {}", i, name);
-            }
         }
 
         // Try to find a keyboard or use the first available port
@@ -95,11 +84,6 @@ impl MidiHandler {
             .unwrap_or(0);
 
         let selected_port = &ports[port];
-        let port_name = midi_in
-            .port_name(selected_port)
-            .unwrap_or_else(|_| "Unknown".to_string());
-
-        println!("\nConnecting to: {}\n", port_name);
 
         // Connect to the selected port
         let connection = midi_in
@@ -110,11 +94,8 @@ impl MidiHandler {
                     // Parse MIDI message
                     let message = MidiMessage::parse(bytes);
 
-                    // Read channel filter from parameters
-                    let channel_filter = parameters.midi_channel.load(Ordering::Relaxed);
-
-                    // Convert to synth event with channel filtering
-                    if let Some(event) = message.to_synth_event(channel_filter) {
+                    // Convert to synth event (channel filtering happens at engine level)
+                    if let Some(event) = message.to_synth_event() {
                         // Use try_send to avoid blocking MIDI thread
                         let _ = event_tx.try_send(event);
                     }

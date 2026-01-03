@@ -1,4 +1,4 @@
-.PHONY: build run install uninstall clean test
+.PHONY: build run list help install uninstall clean test
 
 # Build the project in release mode
 build:
@@ -6,7 +6,15 @@ build:
 
 # Run the project
 run:
-	cargo run
+	cargo run -- --config example-config.yaml
+
+# List all available MIDI input and audio output devices
+list:
+	cargo run -- --list
+
+# Output command help
+help:
+	cargo run -- --help
 
 # Install to ~/.cargo/bin
 install:

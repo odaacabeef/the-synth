@@ -10,19 +10,22 @@ pub struct SynthEngine {
     voice_pool: VoicePool,
     parameters: Arc<SynthParameters>,
     event_rx: Receiver<SynthEvent>,
+    midi_channel_filter: u8, // 0-15 for specific channel, 255 for omni
 }
 
 impl SynthEngine {
-    /// Create new synthesis engine with MIDI event receiver and voice pool
-    pub fn new(
+    /// Create new synthesis engine with specific MIDI channel filter
+    pub fn new_with_channel(
         sample_rate: f32,
         parameters: Arc<SynthParameters>,
         event_rx: Receiver<SynthEvent>,
+        midi_channel_filter: u8,
     ) -> Self {
         Self {
             voice_pool: VoicePool::new(sample_rate),
             parameters,
             event_rx,
+            midi_channel_filter,
         }
     }
 
@@ -31,24 +34,43 @@ impl SynthEngine {
         self.voice_pool.voice_states()
     }
 
+    /// Check if this engine should process the given event based on channel filtering
+    fn should_process_event(&self, event: &SynthEvent) -> bool {
+        // Omni mode (255) accepts all channels
+        if self.midi_channel_filter == 255 {
+            return true;
+        }
+
+        // Check if event channel matches our filter
+        match event.channel() {
+            Some(ch) => ch == self.midi_channel_filter,
+            None => true, // AllNotesOff with no channel affects all engines
+        }
+    }
+
     /// Process audio callback - fills output buffer with samples
     /// This runs in real-time audio thread - must be fast and lock-free
     pub fn process(&mut self, output: &mut [f32]) {
         // Process all pending MIDI events (non-blocking)
         while let Ok(event) = self.event_rx.try_recv() {
+            // Filter by channel (255 = omni, accepts all)
+            if !self.should_process_event(&event) {
+                continue;
+            }
+
             match event {
-                SynthEvent::NoteOn { frequency, velocity: _ } => {
+                SynthEvent::NoteOn { frequency, velocity: _, .. } => {
                     // Extract note number from the event
                     // We need the note number to match Note Off events
                     // Calculate it back from frequency (rough approximation)
                     let note = frequency_to_midi_note(frequency);
                     self.voice_pool.note_on(note, frequency);
                 }
-                SynthEvent::NoteOff { note } => {
+                SynthEvent::NoteOff { note, .. } => {
                     // Release the matching voice
                     self.voice_pool.note_off(note);
                 }
-                SynthEvent::AllNotesOff => {
+                SynthEvent::AllNotesOff { .. } => {
                     // MIDI panic - release all voices
                     self.voice_pool.all_notes_off();
                 }
