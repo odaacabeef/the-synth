@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use crossbeam_channel::Sender;
 use midir::{MidiInput, MidiInputConnection};
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::Arc;
 
 use super::message::MidiMessage;
 use crate::audio::parameters::SynthParameters;
@@ -38,11 +38,8 @@ impl MidiHandler {
                     // Parse MIDI message
                     let message = MidiMessage::parse(bytes);
 
-                    // Read channel filter from parameters
-                    let channel_filter = parameters.midi_channel.load(Ordering::Relaxed);
-
-                    // Convert to synth event with channel filtering
-                    if let Some(event) = message.to_synth_event(channel_filter) {
+                    // Convert to synth event (channel filtering happens at engine level)
+                    if let Some(event) = message.to_synth_event() {
                         // Use try_send to avoid blocking MIDI thread
                         let _ = event_tx.try_send(event);
                     }
@@ -110,11 +107,8 @@ impl MidiHandler {
                     // Parse MIDI message
                     let message = MidiMessage::parse(bytes);
 
-                    // Read channel filter from parameters
-                    let channel_filter = parameters.midi_channel.load(Ordering::Relaxed);
-
-                    // Convert to synth event with channel filtering
-                    if let Some(event) = message.to_synth_event(channel_filter) {
+                    // Convert to synth event (channel filtering happens at engine level)
+                    if let Some(event) = message.to_synth_event() {
                         // Use try_send to avoid blocking MIDI thread
                         let _ = event_tx.try_send(event);
                     }

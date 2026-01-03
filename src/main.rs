@@ -1,4 +1,5 @@
 mod audio;
+mod config;
 mod dsp;
 mod midi;
 mod types;
@@ -18,7 +19,8 @@ use std::{
     time::Duration,
 };
 
-use audio::{engine::SynthEngine, parameters::SynthParameters};
+use audio::{engine::SynthEngine, multi_engine::MultiEngineSynth, parameters::SynthParameters};
+use config::SynthConfig;
 use midi::handler::MidiHandler;
 use ui::{app::App, events, render};
 
@@ -27,8 +29,12 @@ use ui::{app::App, events, render};
 #[command(name = "the-synth")]
 #[command(about = "16-voice polyphonic synthesizer", long_about = None)]
 struct Args {
+    /// Configuration file (YAML) - when provided, other args are ignored
+    #[arg(short = 'c', long = "config")]
+    config: Option<std::path::PathBuf>,
+
     /// MIDI input device (index or name)
-    #[arg(short = 'm', long = "midi-device", required_unless_present = "list_devices")]
+    #[arg(short = 'm', long = "midi-device", required_unless_present_any = ["list_devices", "config"])]
     midi_input: Option<String>,
 
     /// MIDI channel (1-16 or 'omni' for all channels)
@@ -36,7 +42,7 @@ struct Args {
     midi_channel: String,
 
     /// Audio output device (index or name)
-    #[arg(short = 'a', long = "audio-device", required_unless_present = "list_devices")]
+    #[arg(short = 'a', long = "audio-device", required_unless_present_any = ["list_devices", "config"])]
     audio_output: Option<String>,
 
     /// Audio output channels (e.g., "0" for left, "1" for right, "0,1" for stereo)
@@ -189,6 +195,12 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Check if config mode is requested
+    if let Some(config_path) = args.config {
+        return run_config_mode(config_path, midi_devices, audio_devices);
+    }
+
+    // Legacy mode - single synthesizer
     // Find selected devices (unwrap is safe because args are required when not listing)
     let selected_midi_device = find_midi_device(&midi_devices, &args.midi_input.unwrap())?;
     let selected_audio_device = find_audio_device(&audio_devices, &args.audio_output.unwrap())?;
@@ -251,6 +263,217 @@ fn main() -> Result<()> {
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
+
+    Ok(())
+}
+
+/// Run in config mode - multi-instance synthesizers from YAML config
+fn run_config_mode(
+    config_path: std::path::PathBuf,
+    midi_devices: Vec<String>,
+    audio_devices: Vec<String>,
+) -> Result<()> {
+    // Load configuration
+    println!("Loading configuration from: {}", config_path.display());
+    let config = SynthConfig::load(&config_path)?;
+
+    println!("Configuration loaded successfully!");
+    println!("  Synth instances: {}", config.synths.len());
+    println!("  MIDI input: {}", config.devices.midiin);
+    println!("  Audio output: {}", config.devices.audioout);
+
+    // Find devices
+    let selected_midi_device = find_midi_device(&midi_devices, &config.devices.midiin)?;
+    let selected_audio_device = find_audio_device(&audio_devices, &config.devices.audioout)?;
+
+    println!("\nUsing devices:");
+    println!("  MIDI: {} (index {})", midi_devices[selected_midi_device], selected_midi_device);
+    println!("  Audio: {} (index {})", audio_devices[selected_audio_device], selected_audio_device);
+
+    // Create main event channel for MIDI
+    let (event_tx, event_rx) = crossbeam_channel::unbounded();
+
+    // Create parameters and channel for each synth instance
+    let mut instances = Vec::new();
+    let mut all_parameters = Vec::new();
+
+    for synth_config in &config.synths {
+        let params = Arc::new(SynthParameters::default());
+
+        // Set ADSR parameters
+        params.attack.store(synth_config.attack, std::sync::atomic::Ordering::Relaxed);
+        params.decay.store(synth_config.decay, std::sync::atomic::Ordering::Relaxed);
+        params.sustain.store(synth_config.sustain, std::sync::atomic::Ordering::Relaxed);
+        params.release.store(synth_config.release, std::sync::atomic::Ordering::Relaxed);
+
+        // Set waveform
+        let waveform = synth_config.waveform();
+        params.waveform.store(waveform.to_u8(), std::sync::atomic::Ordering::Relaxed);
+
+        // Create instance tuple: (name, parameters, midi_channel, audio_channel)
+        // Note: audio_channel_index() converts 1-indexed config value to 0-indexed
+        instances.push((
+            synth_config.name.clone(),
+            params.clone(),
+            synth_config.midi_channel_filter(),
+            synth_config.audio_channel_index(),
+        ));
+
+        all_parameters.push(params);
+    }
+
+    // Print synth instances
+    println!("\nSynth instances:");
+    for (name, _, midi_ch, audio_ch) in &instances {
+        let midi_ch_str = if *midi_ch == 255 {
+            "omni".to_string()
+        } else {
+            format!("{}", midi_ch + 1)
+        };
+        println!("  {} - MIDI CH{} → Audio CH{}", name, midi_ch_str, audio_ch);
+    }
+
+    // Connect to MIDI device (no channel filtering - filtering happens per-engine)
+    let dummy_params = Arc::new(SynthParameters::default());
+    let _midi_handler = MidiHandler::new_with_device(event_tx, selected_midi_device, dummy_params)?;
+
+    println!("\nMIDI connected!");
+
+    // Initialize audio with selected device
+    let host = cpal::default_host();
+    let device = host
+        .output_devices()?
+        .nth(selected_audio_device)
+        .ok_or_else(|| anyhow::anyhow!("Selected audio device not available"))?;
+
+    let audio_config = device.default_output_config()?;
+    let num_channels = audio_config.channels() as usize;
+
+    println!("Audio device has {} channels", num_channels);
+
+    // Create voice state channels for UI
+    let (voice_tx, voice_rx) = crossbeam_channel::unbounded::<Vec<[Option<u8>; 16]>>();
+
+    // Start audio stream with multi-engine
+    let _stream = match audio_config.sample_format() {
+        cpal::SampleFormat::F32 => {
+            start_multi_audio_stream::<f32>(&device, &audio_config.into(), instances, event_rx, voice_tx, num_channels)?
+        }
+        cpal::SampleFormat::I16 => {
+            start_multi_audio_stream::<i16>(&device, &audio_config.into(), instances, event_rx, voice_tx, num_channels)?
+        }
+        cpal::SampleFormat::U16 => {
+            start_multi_audio_stream::<u16>(&device, &audio_config.into(), instances, event_rx, voice_tx, num_channels)?
+        }
+        _ => panic!("Unsupported sample format"),
+    };
+
+    println!("Audio started!");
+    println!("\nPress 'q' to quit, Page Up/Down to switch instances\n");
+
+    // Setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Create multi-instance app
+    let mut app = App::new_multi_instance(all_parameters, config.synths.clone());
+
+    // Run UI loop
+    run_multi_ui_loop(&mut terminal, &mut app, voice_rx)?;
+
+    // Restore terminal
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    terminal.show_cursor()?;
+
+    Ok(())
+}
+
+/// Start audio stream with multi-engine support
+fn start_multi_audio_stream<T>(
+    device: &cpal::Device,
+    config: &cpal::StreamConfig,
+    instances: Vec<(String, Arc<SynthParameters>, u8, usize)>,
+    event_rx: crossbeam_channel::Receiver<types::events::SynthEvent>,
+    voice_tx: crossbeam_channel::Sender<Vec<[Option<u8>; 16]>>,
+    num_channels: usize,
+) -> Result<cpal::Stream>
+where
+    T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>,
+{
+    let sample_rate = config.sample_rate as f32;
+
+    // Create multi-engine synth
+    let mut multi_engine = MultiEngineSynth::new(sample_rate, instances, event_rx);
+
+    // Pre-allocate buffer for processing
+    let mut temp_buffer = vec![0.0f32; 512 * num_channels];
+    let mut frame_counter = 0u64;
+
+    // Build output stream
+    let stream = device.build_output_stream(
+        config,
+        move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
+            let frames = data.len() / num_channels;
+
+            // Ensure temp buffer is large enough
+            if temp_buffer.len() < frames * num_channels {
+                temp_buffer.resize(frames * num_channels, 0.0);
+            }
+
+            // Process all engines and mix to multi-channel output
+            multi_engine.process(&mut temp_buffer[..frames * num_channels], num_channels);
+
+            // Convert to output sample format
+            for (i, sample) in temp_buffer[..frames * num_channels].iter().enumerate() {
+                data[i] = T::from_sample(*sample);
+            }
+
+            // Periodically send voice states to UI
+            frame_counter += frames as u64;
+            if frame_counter > 4410 {
+                let _ = voice_tx.try_send(multi_engine.all_voice_states());
+                frame_counter = 0;
+            }
+        },
+        |err| eprintln!("Audio stream error: {}", err),
+        None,
+    )?;
+
+    stream.play()?;
+
+    Ok(stream)
+}
+
+/// Run multi-instance UI loop
+fn run_multi_ui_loop(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    app: &mut App,
+    voice_rx: crossbeam_channel::Receiver<Vec<[Option<u8>; 16]>>,
+) -> Result<()> {
+    loop {
+        // Update voice states from audio thread
+        while let Ok(states) = voice_rx.try_recv() {
+            app.update_multi_voice_states(states);
+        }
+
+        // Render UI
+        terminal.draw(|f| render::render(f, app))?;
+
+        // Handle events
+        events::handle_events(app)?;
+
+        // Check if should quit
+        if app.should_quit {
+            break;
+        }
+
+        // Small sleep to reduce CPU usage
+        std::thread::sleep(Duration::from_millis(16)); // ~60 FPS
+    }
 
     Ok(())
 }

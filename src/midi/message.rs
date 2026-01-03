@@ -75,33 +75,21 @@ impl MidiMessage {
     }
 
     /// Convert MIDI message to synth event
-    /// Filters by MIDI channel: 255 = omni (all channels), 0-15 = specific channel
-    pub fn to_synth_event(&self, channel_filter: u8) -> Option<SynthEvent> {
+    /// Channel filtering now happens at the engine level, not here
+    pub fn to_synth_event(&self) -> Option<SynthEvent> {
         match self {
             MidiMessage::NoteOn { channel, note, velocity } => {
-                // Filter by channel (255 = omni mode)
-                if channel_filter != 255 && *channel != channel_filter {
-                    return None;
-                }
                 let frequency = midi_note_to_frequency(*note);
                 let amplitude = midi_velocity_to_amplitude(*velocity);
-                Some(SynthEvent::note_on(frequency, amplitude))
+                Some(SynthEvent::note_on(*channel, frequency, amplitude))
             }
             MidiMessage::NoteOff { channel, note, .. } => {
-                // Filter by channel (255 = omni mode)
-                if channel_filter != 255 && *channel != channel_filter {
-                    return None;
-                }
-                Some(SynthEvent::note_off(*note))
+                Some(SynthEvent::note_off(*channel, *note))
             }
             MidiMessage::ControlChange { channel, controller, .. } => {
-                // Filter by channel (255 = omni mode)
-                if channel_filter != 255 && *channel != channel_filter {
-                    return None;
-                }
                 // CC 123 = All Notes Off (MIDI panic)
                 if *controller == 123 {
-                    Some(SynthEvent::all_notes_off())
+                    Some(SynthEvent::all_notes_off_channel(*channel))
                 } else {
                     None
                 }
@@ -157,8 +145,9 @@ mod tests {
             note: 69, // A4
             velocity: 100,
         };
-        let event = msg.to_synth_event(255).unwrap(); // 255 = omni mode
-        if let SynthEvent::NoteOn { frequency, .. } = event {
+        let event = msg.to_synth_event().unwrap();
+        if let SynthEvent::NoteOn { channel, frequency, .. } = event {
+            assert_eq!(channel, 0);
             assert!((frequency - 440.0).abs() < 0.1);
         } else {
             panic!("Expected NoteOn event");
