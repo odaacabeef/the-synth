@@ -1,0 +1,36 @@
+devices:
+  midiin: mc-out-a
+  audioout: Blackhole 16ch
+
+synths:
+  - midich: 1
+    audioch: 1
+    attack: 0.01
+    decay: 0.1
+    sustain: 0.4
+    release: 0.1
+    wave: sine
+
+  - midich: 2
+    audioch: 2
+    attack: 0.01
+    decay: 0.1
+    sustain: 0.4
+    release: 0.5
+    wave: triangle
+
+  - midich: 3
+    audioch: 3
+    attack: 0.01
+    decay: 0.1
+    sustain: 0.15
+    release: 0.65
+    wave: sawtooth
+
+  - midich: 4
+    audioch: 4
+    attack: 0.01
+    decay: 0.1
+    sustain: 0.4
+    release: 0.1
+    wave: square
