@@ -3,13 +3,19 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+use crate::instruments::drums::DrumType;
 use crate::types::waveform::Waveform;
 
 /// Top-level configuration structure
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SynthConfig {
     pub devices: DeviceConfig,
+
+    #[serde(default)]
     pub synths: Vec<SynthInstanceConfig>,
+
+    #[serde(default)]
+    pub drums: Vec<DrumInstanceConfig>,
 }
 
 impl SynthConfig {
@@ -28,13 +34,22 @@ impl SynthConfig {
 
     /// Validate the configuration
     pub fn validate(&self) -> Result<()> {
-        if self.synths.is_empty() {
-            return Err(anyhow!("Configuration must have at least one synth instance"));
+        // Allow empty synths if we have drums
+        if self.synths.is_empty() && self.drums.is_empty() {
+            return Err(anyhow!(
+                "Configuration must have at least one synth or drum instance"
+            ));
         }
 
         for (idx, synth) in self.synths.iter().enumerate() {
-            synth.validate()
+            synth
+                .validate()
                 .with_context(|| format!("Invalid configuration for synth instance {}", idx))?;
+        }
+
+        for (idx, drum) in self.drums.iter().enumerate() {
+            drum.validate()
+                .with_context(|| format!("Invalid configuration for drum instance {}", idx))?;
         }
 
         Ok(())
@@ -131,6 +146,105 @@ impl SynthInstanceConfig {
             WaveformSpec::Sawtooth => Waveform::Sawtooth,
             WaveformSpec::Square => Waveform::Square,
         }
+    }
+}
+
+/// Drum instance configuration
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DrumInstanceConfig {
+    pub midich: MidiChannelSpec,
+    pub audioch: usize,
+    #[serde(rename = "type")]
+    pub drum_type: DrumType,
+    pub note: String, // Note name like "c1", "d1", "gb1"
+}
+
+impl DrumInstanceConfig {
+    /// Validate this drum instance configuration
+    pub fn validate(&self) -> Result<()> {
+        // Validate MIDI channel (1-16)
+        match &self.midich {
+            MidiChannelSpec::Channel(ch) => {
+                if *ch < 1 || *ch > 16 {
+                    return Err(anyhow!("MIDI channel must be between 1 and 16"));
+                }
+            }
+            MidiChannelSpec::Omni(_) => {
+                // Always valid
+            }
+        }
+
+        // Validate audio channel (1-indexed, must be >= 1)
+        if self.audioch < 1 {
+            return Err(anyhow!("Audio channel must be >= 1 (channels are 1-indexed)"));
+        }
+
+        // Validate note string can be parsed
+        self.parse_note()?;
+
+        Ok(())
+    }
+
+    /// Get the 0-indexed audio channel for internal use
+    pub fn audio_channel_index(&self) -> usize {
+        self.audioch.saturating_sub(1)
+    }
+
+    /// Get the MIDI channel filter value (0-15 for specific channel, 255 for omni)
+    pub fn midi_channel_filter(&self) -> u8 {
+        match &self.midich {
+            MidiChannelSpec::Channel(ch) => ch - 1, // Convert 1-16 to 0-15
+            MidiChannelSpec::Omni(_) => 255,        // Omni mode
+        }
+    }
+
+    /// Parse note string to MIDI note number
+    /// Examples: "c1" -> 24, "d1" -> 26, "gb1" -> 30
+    pub fn parse_note(&self) -> Result<u8> {
+        let note_str = self.note.to_lowercase();
+
+        // Parse note name (c, c#, d, etc.)
+        let mut chars = note_str.chars();
+        let note_char = chars
+            .next()
+            .ok_or_else(|| anyhow!("Empty note string"))?;
+
+        let base_note = match note_char {
+            'c' => 0,
+            'd' => 2,
+            'e' => 4,
+            'f' => 5,
+            'g' => 7,
+            'a' => 9,
+            'b' => 11,
+            _ => return Err(anyhow!("Invalid note name: {}", note_char)),
+        };
+
+        // Check for sharp/flat
+        let mut offset = 0;
+        let mut octave_str = String::new();
+        for ch in chars {
+            match ch {
+                '#' | 's' => offset = 1,  // Sharp
+                'b' | 'f' => offset = -1, // Flat
+                '0'..='9' | '-' => octave_str.push(ch),
+                _ => return Err(anyhow!("Invalid character in note: {}", ch)),
+            }
+        }
+
+        // Parse octave
+        let octave: i32 = octave_str
+            .parse()
+            .map_err(|_| anyhow!("Invalid octave: {}", octave_str))?;
+
+        // Calculate MIDI note: C-1 = 0, C0 = 12, C1 = 24, etc.
+        let midi_note = (octave + 1) * 12 + base_note + offset;
+
+        if midi_note < 0 || midi_note > 127 {
+            return Err(anyhow!("Note out of range: {}", midi_note));
+        }
+
+        Ok(midi_note as u8)
     }
 }
 

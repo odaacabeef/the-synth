@@ -59,11 +59,8 @@ impl SynthEngine {
             }
 
             match event {
-                SynthEvent::NoteOn { frequency, velocity: _, .. } => {
-                    // Extract note number from the event
-                    // We need the note number to match Note Off events
-                    // Calculate it back from frequency (rough approximation)
-                    let note = frequency_to_midi_note(frequency);
+                SynthEvent::NoteOn { note, frequency, .. } => {
+                    // Use the note number from the event for voice tracking
                     self.voice_pool.note_on(note, frequency);
                 }
                 SynthEvent::NoteOff { note, .. } => {
@@ -92,13 +89,4 @@ impl SynthEngine {
         // Process all voices and mix to output
         self.voice_pool.process(output);
     }
-}
-
-/// Convert frequency back to MIDI note (approximate)
-fn frequency_to_midi_note(frequency: f32) -> u8 {
-    const A4: f32 = 440.0;
-    const A4_MIDI: i32 = 69;
-
-    let semitones = 12.0 * (frequency / A4).log2();
-    (A4_MIDI + semitones.round() as i32).clamp(0, 127) as u8
 }

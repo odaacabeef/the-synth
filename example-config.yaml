@@ -3,6 +3,7 @@ devices:
   audioout: Blackhole 16ch
 
 synths:
+
   - midich: 1
     audioch: 1
     attack: 0.01
@@ -34,3 +35,20 @@ synths:
     sustain: 0.4
     release: 0.1
     wave: square
+
+drums:
+
+  - midich: 10
+    audioch: 10
+    type: kick
+    note: c2
+
+  - midich: 10
+    audioch: 11
+    type: snare
+    note: d2
+
+  - midich: 10
+    audioch: 12
+    type: hat
+    note: gb2

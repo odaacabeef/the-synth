@@ -4,7 +4,7 @@ use ratatui::{
     Frame,
 };
 
-use super::app::{App, Parameter};
+use super::app::{App, MultiInstance, Parameter};
 
 /// Render the TUI
 pub fn render(frame: &mut Frame, app: &App) {
@@ -62,47 +62,86 @@ fn render_multi_instance(frame: &mut Frame, app: &App) {
     frame.render_widget(paragraph, frame.size());
 }
 
-/// Build lines for a single synth instance
+/// Build lines for a single instrument instance (synth or drum)
 fn build_instance_lines(
-    instance: &super::app::MultiInstance,
+    instance: &MultiInstance,
+    is_selected: bool,
+    selected_param: Parameter,
+) -> Vec<String> {
+    match instance {
+        MultiInstance::Synth {
+            config,
+            voice_states,
+            ..
+        } => build_synth_lines(config, voice_states, is_selected, selected_param),
+        MultiInstance::Drum {
+            config,
+            voice_state,
+        } => build_drum_lines(config, *voice_state),
+    }
+}
+
+/// Build lines for a synth instance
+fn build_synth_lines(
+    config: &crate::config::SynthInstanceConfig,
+    voice_states: &[Option<u8>; 16],
     is_selected: bool,
     selected_param: Parameter,
 ) -> Vec<String> {
     let mut lines = Vec::new();
 
     // MIDI channel string (1-indexed for display)
-    let midi_ch_str = if instance.config.midi_channel_filter() == 255 {
+    let midi_ch_str = if config.midi_channel_filter() == 255 {
         "omni".to_string()
     } else {
-        format!("{}", instance.config.midi_channel_filter() + 1)
+        format!("{}", config.midi_channel_filter() + 1)
     };
 
-    // Audio channel (already 1-indexed in config)
-    let audio_ch = instance.config.audioch;
-
     // Title line: m<midi>:a<audio>
-    lines.push(format!("  m{}:a{}", midi_ch_str, audio_ch));
-
+    lines.push(format!("  m{}:a{}", midi_ch_str, config.audioch));
     lines.push(String::new()); // Blank line
 
     // ADSR parameters (only show cursor if this instance is selected)
-    let cursor_attack = if is_selected && selected_param == Parameter::Attack { ">" } else { " " };
-    lines.push(format!("{} Attack:  {:.3}s", cursor_attack, instance.config.attack));
+    let cursor_attack = if is_selected && selected_param == Parameter::Attack {
+        ">"
+    } else {
+        " "
+    };
+    lines.push(format!("{} Attack:  {:.3}s", cursor_attack, config.attack));
 
-    let cursor_decay = if is_selected && selected_param == Parameter::Decay { ">" } else { " " };
-    lines.push(format!("{} Decay:   {:.3}s", cursor_decay, instance.config.decay));
+    let cursor_decay = if is_selected && selected_param == Parameter::Decay {
+        ">"
+    } else {
+        " "
+    };
+    lines.push(format!("{} Decay:   {:.3}s", cursor_decay, config.decay));
 
-    let cursor_sustain = if is_selected && selected_param == Parameter::Sustain { ">" } else { " " };
-    lines.push(format!("{} Sustain: {:.2}", cursor_sustain, instance.config.sustain));
+    let cursor_sustain = if is_selected && selected_param == Parameter::Sustain {
+        ">"
+    } else {
+        " "
+    };
+    lines.push(format!("{} Sustain: {:.2}", cursor_sustain, config.sustain));
 
-    let cursor_release = if is_selected && selected_param == Parameter::Release { ">" } else { " " };
-    lines.push(format!("{} Release: {:.3}s", cursor_release, instance.config.release));
+    let cursor_release = if is_selected && selected_param == Parameter::Release {
+        ">"
+    } else {
+        " "
+    };
+    lines.push(format!(
+        "{} Release: {:.3}s",
+        cursor_release, config.release
+    ));
 
     lines.push(String::new()); // Blank line
 
     // Waveform
-    let cursor_waveform = if is_selected && selected_param == Parameter::Waveform { ">" } else { " " };
-    let waveform = instance.config.waveform();
+    let cursor_waveform = if is_selected && selected_param == Parameter::Waveform {
+        ">"
+    } else {
+        " "
+    };
+    let waveform = config.waveform();
     let waveform_str = match waveform {
         crate::types::waveform::Waveform::Sine => "Sine",
         crate::types::waveform::Waveform::Triangle => "Triangle",
@@ -113,15 +152,15 @@ fn build_instance_lines(
 
     lines.push(String::new()); // Blank line
 
-    // Voice states (4 rows of 4 voices each) - add leading spaces for alignment
+    // Voice states (4 rows of 4 voices each)
     for row in 0..4 {
-        let mut voice_line = String::from("  "); // Leading spaces for alignment
+        let mut voice_line = String::from("  ");
         for col in 0..4 {
             if col > 0 {
                 voice_line.push(' ');
             }
             let voice_idx = row * 4 + col;
-            match instance.voice_states[voice_idx] {
+            match voice_states[voice_idx] {
                 Some(note) => {
                     let note_name = midi_note_to_name(note);
                     voice_line.push_str(&format!("{:3}", note_name));
@@ -132,15 +171,60 @@ fn build_instance_lines(
         lines.push(voice_line);
     }
 
-    // Pad all lines to same width for alignment
+    pad_lines(&mut lines);
+    lines
+}
+
+/// Build lines for a drum instance
+fn build_drum_lines(
+    config: &crate::config::DrumInstanceConfig,
+    voice_state: Option<u8>,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+
+    // MIDI channel string (1-indexed for display)
+    let midi_ch_str = if config.midi_channel_filter() == 255 {
+        "omni".to_string()
+    } else {
+        format!("{}", config.midi_channel_filter() + 1)
+    };
+
+    // Title line: m<midi>:a<audio>
+    lines.push(format!("  m{}:a{}", midi_ch_str, config.audioch));
+    lines.push(String::new()); // Blank line
+
+    // Drum type
+    let drum_type_str = config.drum_type.name();
+    lines.push(format!("  Type: {}", drum_type_str));
+
+    // Trigger note
+    let note_num = config.parse_note().unwrap_or(0);
+    let note_name = midi_note_to_name(note_num);
+    lines.push(format!("  Note: {} ({})", note_name, note_num));
+
+    lines.push(String::new()); // Blank line
+
+    // Voice state indicator
+    let state_indicator = if voice_state.is_some() { "[X]" } else { "[ ]" };
+    lines.push(format!("  {}", state_indicator));
+
+    // Add blank lines to match synth height
+    for _ in 0..10 {
+        lines.push(String::new());
+    }
+
+    pad_lines(&mut lines);
+    lines
+}
+
+/// Pad all lines to same width for alignment
+fn pad_lines(lines: &mut [String]) {
     let max_width = lines.iter().map(|s| s.len()).max().unwrap_or(0);
     lines.iter_mut().for_each(|line| {
         while line.len() < max_width {
             line.push(' ');
         }
     });
-
-    lines
 }
 
 /// Render synthesizer help screen

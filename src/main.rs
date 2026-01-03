@@ -1,6 +1,7 @@
 mod audio;
 mod config;
 mod dsp;
+mod instruments;
 mod midi;
 mod types;
 mod ui;
@@ -19,7 +20,8 @@ use std::{
     time::Duration,
 };
 
-use audio::{multi_engine::MultiEngineSynth, parameters::SynthParameters};
+use audio::multi_engine::{EngineSpec, MultiEngineSynth};
+use audio::parameters::SynthParameters;
 use config::SynthConfig;
 use midi::handler::MidiHandler;
 use ui::{app::App, events, render};
@@ -156,7 +158,7 @@ fn run_config_mode(
     // Create main event channel for MIDI
     let (event_tx, event_rx) = crossbeam_channel::unbounded();
 
-    // Create parameters and channel for each synth instance
+    // Create engine specs for each synth instance
     let mut instances = Vec::new();
     let mut all_parameters = Vec::new();
 
@@ -164,24 +166,49 @@ fn run_config_mode(
         let params = Arc::new(SynthParameters::default());
 
         // Set ADSR parameters
-        params.attack.store(synth_config.attack, std::sync::atomic::Ordering::Relaxed);
-        params.decay.store(synth_config.decay, std::sync::atomic::Ordering::Relaxed);
-        params.sustain.store(synth_config.sustain, std::sync::atomic::Ordering::Relaxed);
-        params.release.store(synth_config.release, std::sync::atomic::Ordering::Relaxed);
+        params
+            .attack
+            .store(synth_config.attack, std::sync::atomic::Ordering::Relaxed);
+        params
+            .decay
+            .store(synth_config.decay, std::sync::atomic::Ordering::Relaxed);
+        params
+            .sustain
+            .store(synth_config.sustain, std::sync::atomic::Ordering::Relaxed);
+        params
+            .release
+            .store(synth_config.release, std::sync::atomic::Ordering::Relaxed);
 
         // Set waveform
         let waveform = synth_config.waveform();
-        params.waveform.store(waveform.to_u8(), std::sync::atomic::Ordering::Relaxed);
+        params
+            .waveform
+            .store(waveform.to_u8(), std::sync::atomic::Ordering::Relaxed);
 
-        // Create instance tuple: (parameters, midi_channel, audio_channel)
-        // Note: audio_channel_index() converts 1-indexed config value to 0-indexed
+        // Create synth engine spec
         instances.push((
-            params.clone(),
-            synth_config.midi_channel_filter(),
+            EngineSpec::Synth {
+                params: params.clone(),
+                midi_channel: synth_config.midi_channel_filter(),
+            },
             synth_config.audio_channel_index(),
         ));
 
         all_parameters.push(params);
+    }
+
+    // Create engine specs for each drum instance
+    for drum_config in &config.drums {
+        let trigger_note = drum_config.parse_note()?;
+
+        instances.push((
+            EngineSpec::Drum {
+                drum_type: drum_config.drum_type,
+                trigger_note,
+                midi_channel: drum_config.midi_channel_filter(),
+            },
+            drum_config.audio_channel_index(),
+        ));
     }
 
     // Connect to MIDI device (no channel filtering - filtering happens per-engine)
@@ -223,7 +250,11 @@ fn run_config_mode(
     let mut terminal = Terminal::new(backend)?;
 
     // Create multi-instance app
-    let mut app = App::new_multi_instance(all_parameters, config.synths.clone());
+    let mut app = App::new_multi_instance(
+        all_parameters,
+        config.synths.clone(),
+        config.drums.clone(),
+    );
 
     // Run UI loop
     run_multi_ui_loop(&mut terminal, &mut app, voice_rx)?;
@@ -240,7 +271,7 @@ fn run_config_mode(
 fn start_multi_audio_stream<T>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
-    instances: Vec<(Arc<SynthParameters>, u8, usize)>,
+    instances: Vec<(EngineSpec, usize)>,
     event_rx: crossbeam_channel::Receiver<types::events::SynthEvent>,
     voice_tx: crossbeam_channel::Sender<Vec<[Option<u8>; 16]>>,
     num_channels: usize,
