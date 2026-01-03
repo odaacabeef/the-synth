@@ -6,7 +6,11 @@ build:
 
 # Run the project
 run:
-	cargo run
+	cargo run -- --config example-config.yaml
+
+# List all available MIDI input and audio output devices
+list:
+	cargo run -- --list
 
 # Install to ~/.cargo/bin
 install:
