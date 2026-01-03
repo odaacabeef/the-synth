@@ -14,16 +14,6 @@ pub struct SynthEngine {
 }
 
 impl SynthEngine {
-    /// Create new synthesis engine with MIDI event receiver and voice pool
-    pub fn new(
-        sample_rate: f32,
-        parameters: Arc<SynthParameters>,
-        event_rx: Receiver<SynthEvent>,
-    ) -> Self {
-        // Initialize with omni mode (255) for backward compatibility
-        Self::new_with_channel(sample_rate, parameters, event_rx, 255)
-    }
-
     /// Create new synthesis engine with specific MIDI channel filter
     pub fn new_with_channel(
         sample_rate: f32,

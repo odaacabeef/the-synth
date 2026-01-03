@@ -6,10 +6,8 @@ use crate::types::events::SynthEvent;
 
 /// Individual synthesizer instance within a multi-engine setup
 pub struct SynthInstance {
-    pub name: String,
     pub engine: SynthEngine,
     pub audio_channel: usize,
-    pub midi_channel: u8, // For display purposes
 }
 
 /// Multi-engine synthesizer
@@ -25,17 +23,17 @@ impl MultiEngineSynth {
     ///
     /// # Arguments
     /// * `sample_rate` - Audio sample rate
-    /// * `instances` - Vector of (name, parameters, midi_channel, audio_channel) tuples
+    /// * `instances` - Vector of (parameters, midi_channel, audio_channel) tuples
     /// * `main_event_rx` - Main MIDI event receiver (events will be broadcast to all engines)
     pub fn new(
         sample_rate: f32,
-        instances: Vec<(String, Arc<SynthParameters>, u8, usize)>,
+        instances: Vec<(Arc<SynthParameters>, u8, usize)>,
         main_event_rx: Receiver<SynthEvent>,
     ) -> Self {
         let mut synth_instances = Vec::new();
         let mut instance_event_txs = Vec::new();
 
-        for (name, parameters, midi_channel, audio_channel) in instances {
+        for (parameters, midi_channel, audio_channel) in instances {
             // Create a dedicated event channel for this instance
             let (event_tx, event_rx) = unbounded();
 
@@ -48,10 +46,8 @@ impl MultiEngineSynth {
             );
 
             synth_instances.push(SynthInstance {
-                name,
                 engine,
                 audio_channel,
-                midi_channel,
             });
 
             instance_event_txs.push(event_tx);
@@ -62,16 +58,6 @@ impl MultiEngineSynth {
             main_event_rx,
             instance_event_txs,
         }
-    }
-
-    /// Get the number of synth instances
-    pub fn instance_count(&self) -> usize {
-        self.instances.len()
-    }
-
-    /// Get a reference to a specific instance
-    pub fn get_instance(&self, index: usize) -> Option<&SynthInstance> {
-        self.instances.get(index)
     }
 
     /// Get voice states for all instances
@@ -120,20 +106,6 @@ impl MultiEngineSynth {
                 }
             }
         }
-    }
-
-    /// Get parameters for a specific instance
-    pub fn get_instance_parameters(&self, index: usize) -> Option<&Arc<SynthParameters>> {
-        // We need to store parameters separately for access
-        // For now, return None - this will be enhanced when UI integration happens
-        None
-    }
-}
-
-impl SynthInstance {
-    /// Get the engine's voice states
-    pub fn voice_states(&self) -> [Option<u8>; 16] {
-        self.engine.voice_states()
     }
 }
 

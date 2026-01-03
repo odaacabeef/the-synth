@@ -183,10 +183,9 @@ fn run_config_mode(
         let waveform = synth_config.waveform();
         params.waveform.store(waveform.to_u8(), std::sync::atomic::Ordering::Relaxed);
 
-        // Create instance tuple: (name, parameters, midi_channel, audio_channel)
+        // Create instance tuple: (parameters, midi_channel, audio_channel)
         // Note: audio_channel_index() converts 1-indexed config value to 0-indexed
         instances.push((
-            synth_config.name.clone(),
             params.clone(),
             synth_config.midi_channel_filter(),
             synth_config.audio_channel_index(),
@@ -197,13 +196,14 @@ fn run_config_mode(
 
     // Print synth instances
     println!("\nSynth instances:");
-    for (name, _, midi_ch, audio_ch) in &instances {
+    for (idx, (_, midi_ch, audio_ch)) in instances.iter().enumerate() {
         let midi_ch_str = if *midi_ch == 255 {
             "omni".to_string()
         } else {
             format!("{}", midi_ch + 1)
         };
-        println!("  {} - MIDI CH{} → Audio CH{}", name, midi_ch_str, audio_ch);
+        // audio_ch is 0-indexed internally, add 1 for display
+        println!("  Instance {} - MIDI CH{} → Audio CH{}", idx, midi_ch_str, audio_ch + 1);
     }
 
     // Connect to MIDI device (no channel filtering - filtering happens per-engine)
@@ -269,7 +269,7 @@ fn run_config_mode(
 fn start_multi_audio_stream<T>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
-    instances: Vec<(String, Arc<SynthParameters>, u8, usize)>,
+    instances: Vec<(Arc<SynthParameters>, u8, usize)>,
     event_rx: crossbeam_channel::Receiver<types::events::SynthEvent>,
     voice_tx: crossbeam_channel::Sender<Vec<[Option<u8>; 16]>>,
     num_channels: usize,

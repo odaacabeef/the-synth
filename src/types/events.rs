@@ -26,11 +26,6 @@ impl SynthEvent {
         SynthEvent::AllNotesOff { channel: Some(channel) }
     }
 
-    /// Create an all notes off event for all channels
-    pub fn all_notes_off_all() -> Self {
-        SynthEvent::AllNotesOff { channel: None }
-    }
-
     /// Get the channel for this event, if applicable
     pub fn channel(&self) -> Option<u8> {
         match self {

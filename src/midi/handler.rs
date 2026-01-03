@@ -18,7 +18,7 @@ impl MidiHandler {
     pub fn new_with_device(
         event_tx: Sender<SynthEvent>,
         device_index: usize,
-        parameters: Arc<SynthParameters>,
+        _parameters: Arc<SynthParameters>,
     ) -> Result<Self> {
         let midi_in = MidiInput::new("the-synth-input")?;
         let ports = midi_in.ports();
@@ -56,7 +56,7 @@ impl MidiHandler {
     /// Connect to MIDI input device and start receiving messages
     /// Auto-selects first available device (legacy method)
     #[allow(dead_code)]
-    pub fn new(event_tx: Sender<SynthEvent>, parameters: Arc<SynthParameters>) -> Result<Self> {
+    pub fn new(event_tx: Sender<SynthEvent>, _parameters: Arc<SynthParameters>) -> Result<Self> {
         let midi_in = MidiInput::new("the-synth-input")?;
 
         // Get available MIDI input ports
