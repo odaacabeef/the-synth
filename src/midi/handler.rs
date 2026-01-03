@@ -66,14 +66,6 @@ impl MidiHandler {
             return Err(anyhow!("No MIDI input devices found"));
         }
 
-        // List available ports
-        println!("\nAvailable MIDI input devices:");
-        for (i, port) in ports.iter().enumerate() {
-            if let Ok(name) = midi_in.port_name(port) {
-                println!("  [{}] {}", i, name);
-            }
-        }
-
         // Try to find a keyboard or use the first available port
         let port = ports
             .iter()
@@ -92,11 +84,6 @@ impl MidiHandler {
             .unwrap_or(0);
 
         let selected_port = &ports[port];
-        let port_name = midi_in
-            .port_name(selected_port)
-            .unwrap_or_else(|_| "Unknown".to_string());
-
-        println!("\nConnecting to: {}\n", port_name);
 
         // Connect to the selected port
         let connection = midi_in

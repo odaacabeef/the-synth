@@ -147,21 +147,11 @@ fn run_config_mode(
     audio_devices: Vec<String>,
 ) -> Result<()> {
     // Load configuration
-    println!("Loading configuration from: {}", config_path.display());
     let config = SynthConfig::load(&config_path)?;
-
-    println!("Configuration loaded successfully!");
-    println!("  Synth instances: {}", config.synths.len());
-    println!("  MIDI input: {}", config.devices.midiin);
-    println!("  Audio output: {}", config.devices.audioout);
 
     // Find devices
     let selected_midi_device = find_midi_device(&midi_devices, &config.devices.midiin)?;
     let selected_audio_device = find_audio_device(&audio_devices, &config.devices.audioout)?;
-
-    println!("\nUsing devices:");
-    println!("  MIDI: {} (index {})", midi_devices[selected_midi_device], selected_midi_device);
-    println!("  Audio: {} (index {})", audio_devices[selected_audio_device], selected_audio_device);
 
     // Create main event channel for MIDI
     let (event_tx, event_rx) = crossbeam_channel::unbounded();
@@ -194,23 +184,9 @@ fn run_config_mode(
         all_parameters.push(params);
     }
 
-    // Print synth instances
-    println!("\nSynth instances:");
-    for (idx, (_, midi_ch, audio_ch)) in instances.iter().enumerate() {
-        let midi_ch_str = if *midi_ch == 255 {
-            "omni".to_string()
-        } else {
-            format!("{}", midi_ch + 1)
-        };
-        // audio_ch is 0-indexed internally, add 1 for display
-        println!("  Instance {} - MIDI CH{} → Audio CH{}", idx, midi_ch_str, audio_ch + 1);
-    }
-
     // Connect to MIDI device (no channel filtering - filtering happens per-engine)
     let dummy_params = Arc::new(SynthParameters::default());
     let _midi_handler = MidiHandler::new_with_device(event_tx, selected_midi_device, dummy_params)?;
-
-    println!("\nMIDI connected!");
 
     // Initialize audio with selected device
     let host = cpal::default_host();
@@ -221,8 +197,6 @@ fn run_config_mode(
 
     let audio_config = device.default_output_config()?;
     let num_channels = audio_config.channels() as usize;
-
-    println!("Audio device has {} channels", num_channels);
 
     // Create voice state channels for UI
     let (voice_tx, voice_rx) = crossbeam_channel::unbounded::<Vec<[Option<u8>; 16]>>();
@@ -240,9 +214,6 @@ fn run_config_mode(
         }
         _ => panic!("Unsupported sample format"),
     };
-
-    println!("Audio started!");
-    println!("\nPress 'q' to quit, Page Up/Down to switch instances\n");
 
     // Setup terminal
     enable_raw_mode()?;
