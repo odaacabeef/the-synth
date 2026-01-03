@@ -244,7 +244,7 @@ impl App {
                             instance.config.release = (instance.config.release + 0.05).min(5.0);
                         }
                         Parameter::Waveform => {
-                            instance.config.waveform = match instance.config.waveform {
+                            instance.config.wave = match instance.config.wave {
                                 crate::config::WaveformSpec::Sine => crate::config::WaveformSpec::Triangle,
                                 crate::config::WaveformSpec::Triangle => crate::config::WaveformSpec::Sawtooth,
                                 crate::config::WaveformSpec::Sawtooth => crate::config::WaveformSpec::Square,
@@ -307,7 +307,7 @@ impl App {
                             instance.config.release = (instance.config.release - 0.05).max(0.001);
                         }
                         Parameter::Waveform => {
-                            instance.config.waveform = match instance.config.waveform {
+                            instance.config.wave = match instance.config.wave {
                                 crate::config::WaveformSpec::Sine => crate::config::WaveformSpec::Square,
                                 crate::config::WaveformSpec::Triangle => crate::config::WaveformSpec::Sine,
                                 crate::config::WaveformSpec::Sawtooth => crate::config::WaveformSpec::Triangle,

@@ -70,7 +70,7 @@ pub struct SynthInstanceConfig {
     pub release: f32,
 
     #[serde(default)]
-    pub waveform: WaveformSpec,
+    pub wave: WaveformSpec,
 }
 
 impl SynthInstanceConfig {
@@ -125,7 +125,7 @@ impl SynthInstanceConfig {
 
     /// Convert waveform spec to Waveform enum
     pub fn waveform(&self) -> Waveform {
-        match &self.waveform {
+        match &self.wave {
             WaveformSpec::Sine => Waveform::Sine,
             WaveformSpec::Triangle => Waveform::Triangle,
             WaveformSpec::Sawtooth => Waveform::Sawtooth,
@@ -198,7 +198,7 @@ synths:
     decay: 0.1
     sustain: 0.4
     release: 0.1
-    waveform: sine
+    wave: sine
   - name: "Lead"
     midich: 2
     audioch: 2
@@ -206,7 +206,7 @@ synths:
     decay: 0.05
     sustain: 0.7
     release: 0.2
-    waveform: sawtooth
+    wave: sawtooth
 "#;
 
         let config: SynthConfig = serde_yaml::from_str(yaml).unwrap();
@@ -226,7 +226,7 @@ devices:
 synths:
   - midich: omni
     audioch: 1
-    waveform: sine
+    wave: sine
 "#;
 
         let config: SynthConfig = serde_yaml::from_str(yaml).unwrap();

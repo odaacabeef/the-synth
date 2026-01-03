@@ -42,7 +42,7 @@ fn render_synthesizer(frame: &mut Frame, app: &App) {
 
     // Waveform
     let cursor_waveform = if app.selected_param == Parameter::Waveform { ">" } else { " " };
-    lines.push(Line::from(format!("{} Waveform: {:?}", cursor_waveform, app.waveform)));
+    lines.push(Line::from(format!("{} Wave: {:?}", cursor_waveform, app.waveform)));
 
     // Blank line
     lines.push(Line::from(""));
@@ -165,7 +165,7 @@ fn build_instance_lines(
         crate::types::waveform::Waveform::Sawtooth => "Sawtooth",
         crate::types::waveform::Waveform::Square => "Square",
     };
-    lines.push(format!("{} Waveform: {}", cursor_waveform, waveform_str));
+    lines.push(format!("{} Wave: {}", cursor_waveform, waveform_str));
 
     lines.push(String::new()); // Blank line
 
