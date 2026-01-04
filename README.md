@@ -121,11 +121,11 @@ Each drum type has unique physically-modeled parameters:
 ## Controls
 
 ```
+h/l, ←/→             = Switch between instances (poly16s and drums)
+
 j/k, ↑/↓             = Move cursor between parameters
 
-h/l, ←/→             = Adjust the selected parameter value
-
-H/L, tab/shift+tab   = Switch between instances (poly16s and drums)
+H/L, tab/shift+tab   = Adjust the selected parameter value
 
 0, $                 = Jump to first/last instance
 

@@ -61,20 +61,20 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             }
         }
 
-        // Adjust values (vim-style: l=right, h=left)
+        // Switch instances (vim-style: l=next, h=prev)
         KeyCode::Char('l') | KeyCode::Right => {
-            app.increase_value();
-        }
-        KeyCode::Char('h') | KeyCode::Left => {
-            app.decrease_value();
-        }
-
-        // Switch instances in multi mode (Tab/Shift+Tab or H/L)
-        KeyCode::Tab | KeyCode::Char('L') => {
             app.next_instance();
         }
-        KeyCode::BackTab | KeyCode::Char('H') => {
+        KeyCode::Char('h') | KeyCode::Left => {
             app.prev_instance();
+        }
+
+        // Adjust values (Tab/Shift+Tab or H/L)
+        KeyCode::Tab | KeyCode::Char('L') => {
+            app.increase_value();
+        }
+        KeyCode::BackTab | KeyCode::Char('H') => {
+            app.decrease_value();
         }
 
         // Jump to first/last instance (vim-style: 0/$)
