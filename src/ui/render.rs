@@ -37,6 +37,11 @@ fn render_multi_instance(frame: &mut Frame, app: &App) {
     let max_lines = 20; // Enough for header + parameters + voices
     let mut combined_lines: Vec<String> = vec![String::new(); max_lines];
 
+    // Find the index where drums start (for divider placement)
+    let first_drum_idx = app.multi_instances.iter().position(|inst| {
+        matches!(inst, MultiInstance::Drum { .. })
+    });
+
     for (idx, instance) in app.multi_instances.iter().enumerate() {
         let is_selected = idx == app.current_instance;
         let instance_lines = build_instance_lines(
@@ -46,8 +51,14 @@ fn render_multi_instance(frame: &mut Frame, app: &App) {
             app.selected_drum_param,
         );
 
-        // Add spacing between instances (1 space)
-        let spacing = if idx > 0 { " " } else { "" };
+        // Determine spacing: add divider before first drum
+        let spacing = if idx == 0 {
+            ""
+        } else if Some(idx) == first_drum_idx {
+            "  :" // Divider between poly16s and drums (2 spaces + :)
+        } else {
+            " " // Regular spacing
+        };
 
         // Merge instance lines horizontally
         for (line_idx, line) in instance_lines.iter().enumerate() {
@@ -56,6 +67,14 @@ fn render_multi_instance(frame: &mut Frame, app: &App) {
                 combined_lines[line_idx].push_str(line);
             }
         }
+    }
+
+    // Remove trailing empty lines (including lines with only whitespace and divider)
+    while combined_lines.last().map_or(false, |line| {
+        let trimmed = line.trim();
+        trimmed.is_empty() || trimmed == ":"
+    }) {
+        combined_lines.pop();
     }
 
     // Convert to ratatui Lines and render
