@@ -127,6 +127,8 @@ h/l, ←/→             = Adjust the selected parameter value
 
 H/L, tab/shift+tab   = Switch between instances (poly16s and drums)
 
+0, $                 = Jump to first/last instance
+
 ?                    = Toggle help
 
 q, ctrl+c            = Quit

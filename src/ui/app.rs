@@ -151,6 +151,32 @@ impl App {
         }
     }
 
+    /// Jump to first instance
+    pub fn jump_to_first(&mut self) {
+        if !self.multi_instances.is_empty() {
+            // Save current parameter index before switching
+            let current_index = self.get_current_param_index();
+
+            self.current_instance = 0;
+
+            // Restore parameter index (or max if out of bounds)
+            self.set_param_by_index(current_index);
+        }
+    }
+
+    /// Jump to last instance
+    pub fn jump_to_last(&mut self) {
+        if !self.multi_instances.is_empty() {
+            // Save current parameter index before switching
+            let current_index = self.get_current_param_index();
+
+            self.current_instance = self.multi_instances.len() - 1;
+
+            // Restore parameter index (or max if out of bounds)
+            self.set_param_by_index(current_index);
+        }
+    }
+
     /// Get the current parameter index (0-4)
     fn get_current_param_index(&self) -> usize {
         if let Some(instance) = self.multi_instances.get(self.current_instance) {

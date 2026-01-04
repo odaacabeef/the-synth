@@ -77,6 +77,14 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             app.prev_instance();
         }
 
+        // Jump to first/last instance (vim-style: 0/$)
+        KeyCode::Char('0') => {
+            app.jump_to_first();
+        }
+        KeyCode::Char('$') => {
+            app.jump_to_last();
+        }
+
         _ => {}
     }
 }

@@ -308,6 +308,7 @@ fn render_synthesizer_help(frame: &mut Frame) {
         Line::from("  h/l, ←/→            Adjust the selected parameter value"),
         Line::from("  j/k, ↑/↓            Move cursor between parameters"),
         Line::from("  H/L, tab/shift+tab  Switch between synth instances"),
+        Line::from("  0, $                Jump to first/last instance"),
         Line::from("  ?                   Toggle this help screen"),
         Line::from("  q, ctrl+c           Quit application"),
     ];
