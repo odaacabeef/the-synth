@@ -1,7 +1,7 @@
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use std::time::Duration;
 
-use super::app::App;
+use super::app::{App, MultiInstance};
 
 /// Handle keyboard events and update app state
 pub fn handle_events(app: &mut App) -> anyhow::Result<()> {
@@ -35,26 +35,54 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
 
         // Navigate parameters (vim-style: j=down, k=up)
         KeyCode::Char('j') | KeyCode::Down => {
-            app.next_parameter();
+            // Check if current instance is synth or drum
+            if let Some(instance) = app.multi_instances.get(app.current_instance) {
+                match instance {
+                    MultiInstance::Synth { .. } => {
+                        app.next_parameter();
+                    }
+                    MultiInstance::Drum { config, .. } => {
+                        app.next_drum_parameter(config.drum_type);
+                    }
+                }
+            }
         }
         KeyCode::Char('k') | KeyCode::Up => {
-            app.prev_parameter();
+            // Check if current instance is synth or drum
+            if let Some(instance) = app.multi_instances.get(app.current_instance) {
+                match instance {
+                    MultiInstance::Synth { .. } => {
+                        app.prev_parameter();
+                    }
+                    MultiInstance::Drum { config, .. } => {
+                        app.prev_drum_parameter(config.drum_type);
+                    }
+                }
+            }
         }
 
-        // Adjust values (vim-style: l=right, h=left)
+        // Switch instances (vim-style: l=next, h=prev)
         KeyCode::Char('l') | KeyCode::Right => {
-            app.increase_value();
+            app.next_instance();
         }
         KeyCode::Char('h') | KeyCode::Left => {
+            app.prev_instance();
+        }
+
+        // Adjust values (Tab/Shift+Tab or H/L)
+        KeyCode::Tab | KeyCode::Char('L') => {
+            app.increase_value();
+        }
+        KeyCode::BackTab | KeyCode::Char('H') => {
             app.decrease_value();
         }
 
-        // Switch instances in multi mode (Tab/Shift+Tab)
-        KeyCode::Tab => {
-            app.next_instance();
+        // Jump to first/last instance (vim-style: 0/$)
+        KeyCode::Char('0') => {
+            app.jump_to_first();
         }
-        KeyCode::BackTab => {
-            app.prev_instance();
+        KeyCode::Char('$') => {
+            app.jump_to_last();
         }
 
         _ => {}

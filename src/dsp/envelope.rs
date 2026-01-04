@@ -102,7 +102,12 @@ impl Envelope {
                 if elapsed_samples >= decay_samples {
                     // Decay complete, move to sustain
                     self.current_level = self.sustain;
-                    self.state = EnvelopeState::Sustain;
+                    // If sustain is 0, go directly to Idle (for one-shot envelopes)
+                    if self.sustain == 0.0 {
+                        self.state = EnvelopeState::Idle;
+                    } else {
+                        self.state = EnvelopeState::Sustain;
+                    }
                 } else {
                     // Linear ramp from 1 to sustain level
                     let progress = elapsed_samples as f32 / decay_samples as f32;

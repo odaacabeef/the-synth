@@ -81,7 +81,7 @@ impl MidiMessage {
             MidiMessage::NoteOn { channel, note, velocity } => {
                 let frequency = midi_note_to_frequency(*note);
                 let amplitude = midi_velocity_to_amplitude(*velocity);
-                Some(SynthEvent::note_on(*channel, frequency, amplitude))
+                Some(SynthEvent::note_on(*channel, *note, frequency, amplitude))
             }
             MidiMessage::NoteOff { channel, note, .. } => {
                 Some(SynthEvent::note_off(*channel, *note))
@@ -146,8 +146,9 @@ mod tests {
             velocity: 100,
         };
         let event = msg.to_synth_event().unwrap();
-        if let SynthEvent::NoteOn { channel, frequency, .. } = event {
+        if let SynthEvent::NoteOn { channel, note, frequency, .. } = event {
             assert_eq!(channel, 0);
+            assert_eq!(note, 69);
             assert!((frequency - 440.0).abs() < 0.1);
         } else {
             panic!("Expected NoteOn event");

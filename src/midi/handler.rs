@@ -4,7 +4,7 @@ use midir::{MidiInput, MidiInputConnection};
 use std::sync::Arc;
 
 use super::message::MidiMessage;
-use crate::audio::parameters::SynthParameters;
+use crate::instruments::poly16::SynthParameters;
 use crate::types::events::SynthEvent;
 
 /// MIDI input handler

@@ -2,8 +2,13 @@
 /// Must be simple and fast to construct/parse
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SynthEvent {
-    /// Note on event with channel, frequency and velocity
-    NoteOn { channel: u8, frequency: f32, velocity: f32 },
+    /// Note on event with channel, note number, frequency and velocity
+    NoteOn {
+        channel: u8,
+        note: u8,
+        frequency: f32,
+        velocity: f32,
+    },
     /// Note off event with channel and note number
     NoteOff { channel: u8, note: u8 },
     /// All notes off (MIDI panic) - None for all channels
@@ -12,8 +17,13 @@ pub enum SynthEvent {
 
 impl SynthEvent {
     /// Create a note on event
-    pub fn note_on(channel: u8, frequency: f32, velocity: f32) -> Self {
-        SynthEvent::NoteOn { channel, frequency, velocity }
+    pub fn note_on(channel: u8, note: u8, frequency: f32, velocity: f32) -> Self {
+        SynthEvent::NoteOn {
+            channel,
+            note,
+            frequency,
+            velocity,
+        }
     }
 
     /// Create a note off event

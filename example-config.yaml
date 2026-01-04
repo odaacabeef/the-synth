@@ -2,7 +2,8 @@ devices:
   midiin: mc-out-a
   audioout: Blackhole 16ch
 
-synths:
+poly16s:
+
   - midich: 1
     audioch: 1
     attack: 0.01
@@ -34,3 +35,32 @@ synths:
     sustain: 0.4
     release: 0.1
     wave: square
+
+drums:
+
+  - midich: 10
+    audioch: 10
+    type: kick
+    note: c2
+    pitchstart: 150.0
+    pitchend: 40.0
+    pitchdecay: 0.05
+    kdecay: 0.3
+    click: 0.3
+
+  - midich: 10
+    audioch: 11
+    type: snare
+    note: d2
+    tonefreq: 200.0
+    tonemix: 0.65
+    sdecay: 0.15
+    snap: 0.7
+
+  - midich: 10
+    audioch: 12
+    type: hat
+    note: gb2
+    brightness: 7000.0
+    hdecay: 0.05
+    metallic: 0.4
