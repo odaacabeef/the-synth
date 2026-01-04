@@ -1,17 +1,21 @@
 use std::sync::Arc;
-use crate::dsp::{envelope::Envelope, oscillator::Oscillator, vca::VCA};
+use crate::dsp::{envelope::Envelope, noise::NoiseGenerator, oscillator::Oscillator, vca::VCA};
 use crate::types::waveform::Waveform;
 use super::parameters::KickParameters;
 
 /// Kick drum synthesizer
 /// Uses pitch-swept sine wave: high frequency → low frequency
+/// Plus a noise transient for the beater "click"
 pub struct KickDrum {
     oscillator: Oscillator,
     pitch_envelope: Envelope,  // Controls pitch sweep
     amp_envelope: Envelope,    // Controls amplitude
+    click_envelope: Envelope,  // Controls click transient
+    noise: NoiseGenerator,     // For beater click
     vca: VCA,
     base_frequency: f32,  // Target low frequency (typically 40-60 Hz)
     start_frequency: f32, // Start high frequency (typically 150-200 Hz)
+    click_amount: f32,    // Amount of click to mix in (0.0 to 1.0)
     parameters: Option<Arc<KickParameters>>,  // Optional for backward compatibility
 }
 
@@ -22,9 +26,12 @@ impl KickDrum {
             oscillator: Oscillator::new(sample_rate),
             pitch_envelope: Envelope::new(sample_rate),
             amp_envelope: Envelope::new(sample_rate),
+            click_envelope: Envelope::new(sample_rate),
+            noise: NoiseGenerator::new(),
             vca: VCA::new(),
             base_frequency: 50.0,
             start_frequency: 180.0,
+            click_amount: 0.3,
             parameters: None,
         };
 
@@ -38,6 +45,9 @@ impl KickDrum {
         // Amp envelope: punchy attack, medium decay
         kick.amp_envelope.set_adsr(0.001, 0.3, 0.0, 0.0);
 
+        // Click envelope: very short transient
+        kick.click_envelope.set_adsr(0.0, 0.005, 0.0, 0.0);
+
         kick
     }
 
@@ -47,9 +57,12 @@ impl KickDrum {
             oscillator: Oscillator::new(sample_rate),
             pitch_envelope: Envelope::new(sample_rate),
             amp_envelope: Envelope::new(sample_rate),
+            click_envelope: Envelope::new(sample_rate),
+            noise: NoiseGenerator::new(),
             vca: VCA::new(),
             base_frequency: 50.0,
             start_frequency: 180.0,
+            click_amount: 0.3,
             parameters: Some(parameters),
         };
 
@@ -72,14 +85,14 @@ impl KickDrum {
             self.base_frequency = params.pitch_end.load(Ordering::Relaxed);
             let pitch_decay = params.pitch_decay.load(Ordering::Relaxed);
             let decay = params.decay.load(Ordering::Relaxed);
-            let click = params.click.load(Ordering::Relaxed);
+            self.click_amount = params.click.load(Ordering::Relaxed);
 
             // Update envelopes
             self.pitch_envelope.set_adsr(0.0, pitch_decay, 0.0, 0.0);
+            self.amp_envelope.set_adsr(0.001, decay, 0.0, 0.0);
 
-            // Apply click as attack time adjustment - higher click = faster attack
-            let attack_time = 0.001 * (1.0 - click * 0.9);  // Range: 0.001s to 0.0001s
-            self.amp_envelope.set_adsr(attack_time, decay, 0.0, 0.0);
+            // Click envelope is very short for transient
+            self.click_envelope.set_adsr(0.0, 0.005, 0.0, 0.0);
         }
     }
 
@@ -91,6 +104,7 @@ impl KickDrum {
         self.oscillator.reset();
         self.pitch_envelope.note_on();
         self.amp_envelope.note_on();
+        self.click_envelope.note_on();
 
         // For one-shot behavior, envelope will naturally decay to 0 (sustain = 0)
         // No need to call note_off() - that would capture release_level as 0.0
@@ -111,13 +125,21 @@ impl KickDrum {
             + (self.start_frequency - self.base_frequency) * pitch_env;
         self.oscillator.set_frequency(frequency);
 
-        // Generate oscillator sample
+        // Generate oscillator sample (main tone)
         let osc_sample = self.oscillator.next_sample();
 
-        // Apply amplitude envelope
+        // Generate click transient (beater noise)
+        let click_env = self.click_envelope.next_sample();
+        let noise_sample = self.noise.next_sample();
+        let click_transient = noise_sample * click_env * self.click_amount;
+
+        // Mix tone and click
+        let mixed = osc_sample + click_transient;
+
+        // Apply amplitude envelope to the mix
         let amp_env = self.amp_envelope.next_sample();
 
-        self.vca.process(osc_sample, amp_env)
+        self.vca.process(mixed, amp_env)
     }
 }
 
