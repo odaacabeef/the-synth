@@ -159,33 +159,33 @@ pub struct DrumInstanceConfig {
     pub note: String, // Note name like "c1", "d1", "gb1"
 
     // Kick parameters
-    #[serde(default = "default_kick_pitch_start")]
+    #[serde(default = "default_kick_pitch_start", rename = "pitchstart")]
     pub kick_pitch_start: f32,
-    #[serde(default = "default_kick_pitch_end")]
+    #[serde(default = "default_kick_pitch_end", rename = "pitchend")]
     pub kick_pitch_end: f32,
-    #[serde(default = "default_kick_pitch_decay")]
+    #[serde(default = "default_kick_pitch_decay", rename = "pitchdecay")]
     pub kick_pitch_decay: f32,
-    #[serde(default = "default_kick_decay")]
+    #[serde(default = "default_kick_decay", rename = "kdecay")]
     pub kick_decay: f32,
-    #[serde(default = "default_kick_click")]
+    #[serde(default = "default_kick_click", rename = "click")]
     pub kick_click: f32,
 
     // Snare parameters
-    #[serde(default = "default_snare_tone_freq")]
+    #[serde(default = "default_snare_tone_freq", rename = "tonefreq")]
     pub snare_tone_freq: f32,
-    #[serde(default = "default_snare_tone_mix")]
+    #[serde(default = "default_snare_tone_mix", rename = "tonemix")]
     pub snare_tone_mix: f32,
-    #[serde(default = "default_snare_decay")]
+    #[serde(default = "default_snare_decay", rename = "sdecay")]
     pub snare_decay: f32,
-    #[serde(default = "default_snare_snap")]
+    #[serde(default = "default_snare_snap", rename = "snap")]
     pub snare_snap: f32,
 
     // Hat parameters
-    #[serde(default = "default_hat_brightness")]
+    #[serde(default = "default_hat_brightness", rename = "brightness")]
     pub hat_brightness: f32,
-    #[serde(default = "default_hat_decay")]
+    #[serde(default = "default_hat_decay", rename = "hdecay")]
     pub hat_decay: f32,
-    #[serde(default = "default_hat_metallic")]
+    #[serde(default = "default_hat_metallic", rename = "metallic")]
     pub hat_metallic: f32,
 }
 
