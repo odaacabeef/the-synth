@@ -69,11 +69,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             app.decrease_value();
         }
 
-        // Switch instances in multi mode (Tab/Shift+Tab)
-        KeyCode::Tab => {
+        // Switch instances in multi mode (Tab/Shift+Tab or H/L)
+        KeyCode::Tab | KeyCode::Char('L') => {
             app.next_instance();
         }
-        KeyCode::BackTab => {
+        KeyCode::BackTab | KeyCode::Char('H') => {
             app.prev_instance();
         }
 

@@ -305,13 +305,11 @@ fn render_synthesizer_help(frame: &mut Frame) {
         Line::from(""),
         Line::from("Controls"),
         Line::from(""),
-        Line::from("  h, l, ←, →     Adjust the selected parameter value"),
-        Line::from("  j, k, ↑, ↓     Move cursor between parameters"),
-        Line::from("  Tab/Shift+Tab  Switch between synth instances"),
-        Line::from("  ?              Toggle this help screen"),
-        Line::from("  q, Ctrl+C      Quit application"),
-        Line::from(""),
-        Line::from("Press ? to close this help screen"),
+        Line::from("  h/l, ←/→            Adjust the selected parameter value"),
+        Line::from("  j/k, ↑/↓            Move cursor between parameters"),
+        Line::from("  H/L, tab/shift+tab  Switch between synth instances"),
+        Line::from("  ?                   Toggle this help screen"),
+        Line::from("  q, ctrl+c           Quit application"),
     ];
 
     let paragraph = Paragraph::new(help_text);
