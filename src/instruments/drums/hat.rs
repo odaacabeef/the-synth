@@ -96,7 +96,8 @@ impl HiHat {
         let filtered = self.filter.process(noise_sample);
         let env = self.envelope.next_sample();
 
-        self.vca.process(filtered, env)
+        // Apply VCA with envelope and reduce volume (resonant filter boosts signal)
+        self.vca.process(filtered, env) * 0.3
     }
 }
 
