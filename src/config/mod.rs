@@ -396,7 +396,7 @@ fn default_snare_tone_freq() -> f32 {
 }
 
 fn default_snare_tone_mix() -> f32 {
-    0.3
+    0.65
 }
 
 fn default_snare_decay() -> f32 {
@@ -404,7 +404,7 @@ fn default_snare_decay() -> f32 {
 }
 
 fn default_snare_snap() -> f32 {
-    0.5
+    0.7
 }
 
 // Hi-hat defaults
