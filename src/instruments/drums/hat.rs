@@ -1,12 +1,12 @@
 use std::sync::Arc;
-use crate::dsp::{envelope::Envelope, filter::HighPassFilter, noise::NoiseGenerator, vca::VCA};
+use crate::dsp::{envelope::Envelope, filter::BandPassFilter, noise::NoiseGenerator, vca::VCA};
 use super::parameters::HatParameters;
 
 /// Hi-hat synthesizer
-/// Filtered white noise with very short decay
+/// Resonant band-pass filtered white noise with very short decay
 pub struct HiHat {
     noise: NoiseGenerator,
-    filter: HighPassFilter,
+    filter: BandPassFilter,
     envelope: Envelope,
     vca: VCA,
     parameters: Option<Arc<HatParameters>>,  // Optional for backward compatibility
@@ -17,7 +17,7 @@ impl HiHat {
     pub fn new(sample_rate: f32) -> Self {
         let mut hat = Self {
             noise: NoiseGenerator::new(),
-            filter: HighPassFilter::new(sample_rate, 8000.0), // Very bright
+            filter: BandPassFilter::new(sample_rate, 8000.0, 2.0), // Bright with moderate resonance
             envelope: Envelope::new(sample_rate),
             vca: VCA::new(),
             parameters: None,
@@ -33,7 +33,7 @@ impl HiHat {
     pub fn new_with_parameters(sample_rate: f32, parameters: Arc<HatParameters>) -> Self {
         let mut hat = Self {
             noise: NoiseGenerator::new(),
-            filter: HighPassFilter::new(sample_rate, 7000.0), // Will be updated from parameters
+            filter: BandPassFilter::new(sample_rate, 7000.0, 2.0), // Will be updated from parameters
             envelope: Envelope::new(sample_rate),
             vca: VCA::new(),
             parameters: Some(parameters),
@@ -55,14 +55,20 @@ impl HiHat {
             let decay = params.decay.load(Ordering::Relaxed);
             let metallic = params.metallic.load(Ordering::Relaxed);
 
-            // Update filter cutoff
-            self.filter.set_cutoff(brightness);
+            // Brightness controls band-pass center frequency
+            // Darker (5000 Hz) to brighter (12000 Hz)
+            self.filter.set_center_freq(brightness);
 
-            // Metallic affects attack time - higher metallic = faster attack for sharper sound
-            let attack_time = 0.001 * (1.0 - metallic * 0.8);  // Range: 0.001s to 0.0002s
+            // Metallic controls resonance (Q factor)
+            // Map metallic (0.0 to 1.0) to Q (1.5 to 5.0)
+            // Narrower, more usable range
+            // Low metallic = damped, soft sound
+            // High metallic = resonant, ringing metallic sound
+            let q = 1.5 + (metallic * 3.5);
+            self.filter.set_q(q);
 
-            // Update envelope with parameters
-            self.envelope.set_adsr(attack_time, decay, 0.0, 0.0);
+            // Update envelope with decay parameter
+            self.envelope.set_adsr(0.001, decay, 0.0, 0.0);
         }
     }
 

@@ -82,6 +82,78 @@ impl HighPassFilter {
     }
 }
 
+/// Resonant band-pass filter using state-variable filter topology
+/// Provides center frequency and Q (resonance) control
+pub struct BandPassFilter {
+    sample_rate: f32,
+    center_freq: f32,
+    q: f32,
+    low: f32,
+    band: f32,
+    // Filter coefficients
+    f: f32,
+    q_coeff: f32,
+}
+
+impl BandPassFilter {
+    /// Create new band-pass filter
+    ///
+    /// # Arguments
+    /// * `sample_rate` - Audio sample rate in Hz
+    /// * `center_freq` - Center frequency in Hz
+    /// * `q` - Resonance (Q factor, typically 0.5 to 10.0, higher = more resonant)
+    pub fn new(sample_rate: f32, center_freq: f32, q: f32) -> Self {
+        let mut filter = Self {
+            sample_rate,
+            center_freq,
+            q,
+            low: 0.0,
+            band: 0.0,
+            f: 0.0,
+            q_coeff: 0.0,
+        };
+        filter.update_coefficients();
+        filter
+    }
+
+    /// Set center frequency
+    pub fn set_center_freq(&mut self, center_freq: f32) {
+        self.center_freq = center_freq;
+        self.update_coefficients();
+    }
+
+    /// Set Q (resonance)
+    pub fn set_q(&mut self, q: f32) {
+        self.q = q;
+        self.update_coefficients();
+    }
+
+    /// Update filter coefficients based on frequency and Q
+    fn update_coefficients(&mut self) {
+        // Calculate frequency coefficient
+        self.f = 2.0 * (std::f32::consts::PI * self.center_freq / self.sample_rate).sin();
+        // Calculate Q coefficient (damping)
+        self.q_coeff = 1.0 / self.q;
+    }
+
+    /// Process one sample through the band-pass filter
+    pub fn process(&mut self, input: f32) -> f32 {
+        // State-variable filter equations
+        self.low += self.f * self.band;
+        let high = input - self.low - self.q_coeff * self.band;
+        self.band += self.f * high;
+
+        // Return band-pass output
+        self.band
+    }
+
+    /// Reset filter state
+    pub fn reset(&mut self) {
+        self.low = 0.0;
+        self.band = 0.0;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
