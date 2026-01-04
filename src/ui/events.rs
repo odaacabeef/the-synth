@@ -1,7 +1,7 @@
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use std::time::Duration;
 
-use super::app::App;
+use super::app::{App, MultiInstance};
 
 /// Handle keyboard events and update app state
 pub fn handle_events(app: &mut App) -> anyhow::Result<()> {
@@ -35,10 +35,30 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
 
         // Navigate parameters (vim-style: j=down, k=up)
         KeyCode::Char('j') | KeyCode::Down => {
-            app.next_parameter();
+            // Check if current instance is synth or drum
+            if let Some(instance) = app.multi_instances.get(app.current_instance) {
+                match instance {
+                    MultiInstance::Synth { .. } => {
+                        app.next_parameter();
+                    }
+                    MultiInstance::Drum { config, .. } => {
+                        app.next_drum_parameter(config.drum_type);
+                    }
+                }
+            }
         }
         KeyCode::Char('k') | KeyCode::Up => {
-            app.prev_parameter();
+            // Check if current instance is synth or drum
+            if let Some(instance) = app.multi_instances.get(app.current_instance) {
+                match instance {
+                    MultiInstance::Synth { .. } => {
+                        app.prev_parameter();
+                    }
+                    MultiInstance::Drum { config, .. } => {
+                        app.prev_drum_parameter(config.drum_type);
+                    }
+                }
+            }
         }
 
         // Adjust values (vim-style: l=right, h=left)

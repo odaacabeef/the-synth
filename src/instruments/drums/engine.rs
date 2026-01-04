@@ -1,6 +1,6 @@
 use crossbeam_channel::Receiver;
 
-use super::{types::DrumType, voice::DrumVoice};
+use super::{types::DrumType, voice::DrumVoice, parameters::DrumParameters};
 use crate::types::events::SynthEvent;
 
 /// Drum engine - manages drum voices and note mapping
@@ -13,7 +13,7 @@ pub struct DrumEngine {
 }
 
 impl DrumEngine {
-    /// Create new drum engine
+    /// Create new drum engine with default hardcoded parameters
     ///
     /// # Arguments
     /// * `drum_type` - Type of drum (Kick, Snare, Hat)
@@ -30,6 +30,29 @@ impl DrumEngine {
     ) -> Self {
         Self {
             voice: DrumVoice::new(drum_type, sample_rate),
+            trigger_note,
+            midi_channel_filter,
+            event_rx,
+        }
+    }
+
+    /// Create new drum engine with parameters for real-time control
+    ///
+    /// # Arguments
+    /// * `parameters` - Drum parameters (type-specific)
+    /// * `trigger_note` - MIDI note number that triggers this drum (0-127)
+    /// * `sample_rate` - Audio sample rate in Hz
+    /// * `midi_channel_filter` - MIDI channel to listen to (0-15, or 255 for omni)
+    /// * `event_rx` - Channel receiver for MIDI events
+    pub fn new_with_parameters(
+        parameters: DrumParameters,
+        trigger_note: u8,
+        sample_rate: f32,
+        midi_channel_filter: u8,
+        event_rx: Receiver<SynthEvent>,
+    ) -> Self {
+        Self {
+            voice: DrumVoice::new_with_parameters(sample_rate, parameters),
             trigger_note,
             midi_channel_filter,
             event_rx,

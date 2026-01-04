@@ -157,6 +157,36 @@ pub struct DrumInstanceConfig {
     #[serde(rename = "type")]
     pub drum_type: DrumType,
     pub note: String, // Note name like "c1", "d1", "gb1"
+
+    // Kick parameters
+    #[serde(default = "default_kick_pitch_start")]
+    pub kick_pitch_start: f32,
+    #[serde(default = "default_kick_pitch_end")]
+    pub kick_pitch_end: f32,
+    #[serde(default = "default_kick_pitch_decay")]
+    pub kick_pitch_decay: f32,
+    #[serde(default = "default_kick_decay")]
+    pub kick_decay: f32,
+    #[serde(default = "default_kick_click")]
+    pub kick_click: f32,
+
+    // Snare parameters
+    #[serde(default = "default_snare_tone_freq")]
+    pub snare_tone_freq: f32,
+    #[serde(default = "default_snare_tone_mix")]
+    pub snare_tone_mix: f32,
+    #[serde(default = "default_snare_decay")]
+    pub snare_decay: f32,
+    #[serde(default = "default_snare_snap")]
+    pub snare_snap: f32,
+
+    // Hat parameters
+    #[serde(default = "default_hat_brightness")]
+    pub hat_brightness: f32,
+    #[serde(default = "default_hat_decay")]
+    pub hat_decay: f32,
+    #[serde(default = "default_hat_metallic")]
+    pub hat_metallic: f32,
 }
 
 impl DrumInstanceConfig {
@@ -181,6 +211,52 @@ impl DrumInstanceConfig {
 
         // Validate note string can be parsed
         self.parse_note()?;
+
+        // Validate drum-specific parameters
+        match self.drum_type {
+            DrumType::Kick => {
+                if self.kick_pitch_start < 100.0 || self.kick_pitch_start > 300.0 {
+                    return Err(anyhow!("Kick pitch_start must be between 100 and 300 Hz"));
+                }
+                if self.kick_pitch_end < 30.0 || self.kick_pitch_end > 100.0 {
+                    return Err(anyhow!("Kick pitch_end must be between 30 and 100 Hz"));
+                }
+                if self.kick_pitch_decay < 0.01 || self.kick_pitch_decay > 0.2 {
+                    return Err(anyhow!("Kick pitch_decay must be between 0.01 and 0.2 seconds"));
+                }
+                if self.kick_decay < 0.1 || self.kick_decay > 1.0 {
+                    return Err(anyhow!("Kick decay must be between 0.1 and 1.0 seconds"));
+                }
+                if self.kick_click < 0.0 || self.kick_click > 1.0 {
+                    return Err(anyhow!("Kick click must be between 0.0 and 1.0"));
+                }
+            }
+            DrumType::Snare => {
+                if self.snare_tone_freq < 150.0 || self.snare_tone_freq > 300.0 {
+                    return Err(anyhow!("Snare tone_freq must be between 150 and 300 Hz"));
+                }
+                if self.snare_tone_mix < 0.0 || self.snare_tone_mix > 1.0 {
+                    return Err(anyhow!("Snare tone_mix must be between 0.0 and 1.0"));
+                }
+                if self.snare_decay < 0.05 || self.snare_decay > 0.5 {
+                    return Err(anyhow!("Snare decay must be between 0.05 and 0.5 seconds"));
+                }
+                if self.snare_snap < 0.0 || self.snare_snap > 1.0 {
+                    return Err(anyhow!("Snare snap must be between 0.0 and 1.0"));
+                }
+            }
+            DrumType::Hat => {
+                if self.hat_brightness < 5000.0 || self.hat_brightness > 12000.0 {
+                    return Err(anyhow!("Hat brightness must be between 5000 and 12000 Hz"));
+                }
+                if self.hat_decay < 0.02 || self.hat_decay > 0.5 {
+                    return Err(anyhow!("Hat decay must be between 0.02 and 0.5 seconds"));
+                }
+                if self.hat_metallic < 0.0 || self.hat_metallic > 1.0 {
+                    return Err(anyhow!("Hat metallic must be between 0.0 and 1.0"));
+                }
+            }
+        }
 
         Ok(())
     }
@@ -291,6 +367,57 @@ fn default_sustain() -> f32 {
 
 fn default_release() -> f32 {
     0.1
+}
+
+// Kick drum defaults
+fn default_kick_pitch_start() -> f32 {
+    150.0
+}
+
+fn default_kick_pitch_end() -> f32 {
+    40.0
+}
+
+fn default_kick_pitch_decay() -> f32 {
+    0.05
+}
+
+fn default_kick_decay() -> f32 {
+    0.3
+}
+
+fn default_kick_click() -> f32 {
+    0.3
+}
+
+// Snare drum defaults
+fn default_snare_tone_freq() -> f32 {
+    200.0
+}
+
+fn default_snare_tone_mix() -> f32 {
+    0.3
+}
+
+fn default_snare_decay() -> f32 {
+    0.15
+}
+
+fn default_snare_snap() -> f32 {
+    0.5
+}
+
+// Hi-hat defaults
+fn default_hat_brightness() -> f32 {
+    7000.0
+}
+
+fn default_hat_decay() -> f32 {
+    0.05
+}
+
+fn default_hat_metallic() -> f32 {
+    0.4
 }
 
 #[cfg(test)]

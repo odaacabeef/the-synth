@@ -1,5 +1,7 @@
+use std::sync::Arc;
 use crate::dsp::{envelope::Envelope, oscillator::Oscillator, vca::VCA};
 use crate::types::waveform::Waveform;
+use super::parameters::KickParameters;
 
 /// Kick drum synthesizer
 /// Uses pitch-swept sine wave: high frequency → low frequency
@@ -10,10 +12,11 @@ pub struct KickDrum {
     vca: VCA,
     base_frequency: f32,  // Target low frequency (typically 40-60 Hz)
     start_frequency: f32, // Start high frequency (typically 150-200 Hz)
+    parameters: Option<Arc<KickParameters>>,  // Optional for backward compatibility
 }
 
 impl KickDrum {
-    /// Create new kick drum synthesizer
+    /// Create new kick drum synthesizer with default hardcoded parameters
     pub fn new(sample_rate: f32) -> Self {
         let mut kick = Self {
             oscillator: Oscillator::new(sample_rate),
@@ -22,6 +25,7 @@ impl KickDrum {
             vca: VCA::new(),
             base_frequency: 50.0,
             start_frequency: 180.0,
+            parameters: None,
         };
 
         // Set oscillator to sine wave for smooth kick sound
@@ -37,8 +41,53 @@ impl KickDrum {
         kick
     }
 
+    /// Create new kick drum synthesizer with parameters for real-time control
+    pub fn new_with_parameters(sample_rate: f32, parameters: Arc<KickParameters>) -> Self {
+        let mut kick = Self {
+            oscillator: Oscillator::new(sample_rate),
+            pitch_envelope: Envelope::new(sample_rate),
+            amp_envelope: Envelope::new(sample_rate),
+            vca: VCA::new(),
+            base_frequency: 50.0,
+            start_frequency: 180.0,
+            parameters: Some(parameters),
+        };
+
+        // Set oscillator to sine wave for smooth kick sound
+        kick.oscillator.set_waveform(Waveform::Sine);
+
+        // Load initial parameters
+        kick.update_from_parameters();
+
+        kick
+    }
+
+    /// Update internal state from parameters (called once per trigger for efficiency)
+    fn update_from_parameters(&mut self) {
+        if let Some(params) = &self.parameters {
+            use std::sync::atomic::Ordering;
+
+            // Load all parameters atomically
+            self.start_frequency = params.pitch_start.load(Ordering::Relaxed);
+            self.base_frequency = params.pitch_end.load(Ordering::Relaxed);
+            let pitch_decay = params.pitch_decay.load(Ordering::Relaxed);
+            let decay = params.decay.load(Ordering::Relaxed);
+            let click = params.click.load(Ordering::Relaxed);
+
+            // Update envelopes
+            self.pitch_envelope.set_adsr(0.0, pitch_decay, 0.0, 0.0);
+
+            // Apply click as attack time adjustment - higher click = faster attack
+            let attack_time = 0.001 * (1.0 - click * 0.9);  // Range: 0.001s to 0.0001s
+            self.amp_envelope.set_adsr(attack_time, decay, 0.0, 0.0);
+        }
+    }
+
     /// Trigger the kick drum
     pub fn trigger(&mut self) {
+        // Update parameters before triggering if using parameter control
+        self.update_from_parameters();
+
         self.oscillator.reset();
         self.pitch_envelope.note_on();
         self.amp_envelope.note_on();

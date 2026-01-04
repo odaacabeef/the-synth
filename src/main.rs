@@ -198,17 +198,47 @@ fn run_config_mode(
     }
 
     // Create engine specs for each drum instance
+    let mut drum_parameters = Vec::new();
+
     for drum_config in &config.drums {
         let trigger_note = drum_config.parse_note()?;
+
+        // Create drum parameters from config
+        let params = instruments::drums::DrumParameters::new(drum_config.drum_type);
+
+        // Initialize parameters from config values
+        match &params {
+            instruments::drums::DrumParameters::Kick(kick_params) => {
+                kick_params.pitch_start.store(drum_config.kick_pitch_start, std::sync::atomic::Ordering::Relaxed);
+                kick_params.pitch_end.store(drum_config.kick_pitch_end, std::sync::atomic::Ordering::Relaxed);
+                kick_params.pitch_decay.store(drum_config.kick_pitch_decay, std::sync::atomic::Ordering::Relaxed);
+                kick_params.decay.store(drum_config.kick_decay, std::sync::atomic::Ordering::Relaxed);
+                kick_params.click.store(drum_config.kick_click, std::sync::atomic::Ordering::Relaxed);
+            }
+            instruments::drums::DrumParameters::Snare(snare_params) => {
+                snare_params.tone_freq.store(drum_config.snare_tone_freq, std::sync::atomic::Ordering::Relaxed);
+                snare_params.tone_mix.store(drum_config.snare_tone_mix, std::sync::atomic::Ordering::Relaxed);
+                snare_params.decay.store(drum_config.snare_decay, std::sync::atomic::Ordering::Relaxed);
+                snare_params.snap.store(drum_config.snare_snap, std::sync::atomic::Ordering::Relaxed);
+            }
+            instruments::drums::DrumParameters::Hat(hat_params) => {
+                hat_params.brightness.store(drum_config.hat_brightness, std::sync::atomic::Ordering::Relaxed);
+                hat_params.decay.store(drum_config.hat_decay, std::sync::atomic::Ordering::Relaxed);
+                hat_params.metallic.store(drum_config.hat_metallic, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
 
         instances.push((
             EngineSpec::Drum {
                 drum_type: drum_config.drum_type,
                 trigger_note,
                 midi_channel: drum_config.midi_channel_filter(),
+                parameters: params.clone(),
             },
             drum_config.audio_channel_index(),
         ));
+
+        drum_parameters.push(params);
     }
 
     // Connect to MIDI device (no channel filtering - filtering happens per-engine)
@@ -253,6 +283,7 @@ fn run_config_mode(
     let mut app = App::new_multi_instance(
         all_parameters,
         config.synths.clone(),
+        drum_parameters,
         config.drums.clone(),
     );
 

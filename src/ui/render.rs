@@ -4,7 +4,8 @@ use ratatui::{
     Frame,
 };
 
-use super::app::{App, MultiInstance, Parameter};
+use super::app::{App, MultiInstance, Parameter, DrumParameter};
+use crate::instruments::drums::DrumType;
 
 /// Render the TUI
 pub fn render(frame: &mut Frame, app: &App) {
@@ -38,7 +39,12 @@ fn render_multi_instance(frame: &mut Frame, app: &App) {
 
     for (idx, instance) in app.multi_instances.iter().enumerate() {
         let is_selected = idx == app.current_instance;
-        let instance_lines = build_instance_lines(instance, is_selected, app.selected_param);
+        let instance_lines = build_instance_lines(
+            instance,
+            is_selected,
+            app.selected_param,
+            app.selected_drum_param,
+        );
 
         // Add spacing between instances (1 space)
         let spacing = if idx > 0 { " " } else { "" };
@@ -67,6 +73,7 @@ fn build_instance_lines(
     instance: &MultiInstance,
     is_selected: bool,
     selected_param: Parameter,
+    selected_drum_param: DrumParameter,
 ) -> Vec<String> {
     match instance {
         MultiInstance::Synth {
@@ -77,7 +84,8 @@ fn build_instance_lines(
         MultiInstance::Drum {
             config,
             voice_state,
-        } => build_drum_lines(config, *voice_state),
+            ..
+        } => build_drum_lines(config, *voice_state, is_selected, selected_drum_param),
     }
 }
 
@@ -179,6 +187,8 @@ fn build_synth_lines(
 fn build_drum_lines(
     config: &crate::config::DrumInstanceConfig,
     voice_state: Option<u8>,
+    is_selected: bool,
+    selected_drum_param: DrumParameter,
 ) -> Vec<String> {
     let mut lines = Vec::new();
 
@@ -191,6 +201,30 @@ fn build_drum_lines(
 
     // Title line: m<midi>:a<audio>
     lines.push(format!("  m{}:a{}", midi_ch_str, config.audioch));
+    lines.push(String::new()); // Blank line
+
+    // Parameters based on drum type (MOVED ABOVE type & note)
+    match config.drum_type {
+        DrumType::Kick => {
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickPitchStart, "PitchStart", format!("{}Hz", config.kick_pitch_start));
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickPitchEnd, "PitchEnd", format!("{}Hz", config.kick_pitch_end));
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickPitchDecay, "PitchDecay", format!("{:.3}s", config.kick_pitch_decay));
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickDecay, "Decay", format!("{:.3}s", config.kick_decay));
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickClick, "Click", format!("{:.2}", config.kick_click));
+        }
+        DrumType::Snare => {
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::SnareToneFreq, "ToneFreq", format!("{}Hz", config.snare_tone_freq));
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::SnareToneMix, "ToneMix", format!("{:.2}", config.snare_tone_mix));
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::SnareDecay, "Decay", format!("{:.3}s", config.snare_decay));
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::SnareSnap, "Snap", format!("{:.2}", config.snare_snap));
+        }
+        DrumType::Hat => {
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::HatBrightness, "Brightness", format!("{}Hz", config.hat_brightness));
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::HatDecay, "Decay", format!("{:.3}s", config.hat_decay));
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::HatMetallic, "Metallic", format!("{:.2}", config.hat_metallic));
+        }
+    }
+
     lines.push(String::new()); // Blank line
 
     // Drum type
@@ -209,12 +243,29 @@ fn build_drum_lines(
     lines.push(format!("  {}", state_indicator));
 
     // Add blank lines to match synth height
-    for _ in 0..10 {
+    while lines.len() < 16 {
         lines.push(String::new());
     }
 
     pad_lines(&mut lines);
     lines
+}
+
+/// Helper to add a drum parameter line with cursor indicator
+fn add_drum_param_line(
+    lines: &mut Vec<String>,
+    is_selected: bool,
+    selected_drum_param: DrumParameter,
+    param: DrumParameter,
+    name: &str,
+    value: String,
+) {
+    let cursor = if is_selected && selected_drum_param == param {
+        ">"
+    } else {
+        " "
+    };
+    lines.push(format!("{} {}: {}", cursor, name, value));
 }
 
 /// Pad all lines to same width for alignment

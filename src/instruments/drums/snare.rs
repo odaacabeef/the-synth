@@ -1,8 +1,10 @@
+use std::sync::Arc;
 use crate::dsp::{
     envelope::Envelope, filter::OnePoleFilter, noise::NoiseGenerator, oscillator::Oscillator,
     vca::VCA,
 };
 use crate::types::waveform::Waveform;
+use super::parameters::SnareParameters;
 
 /// Snare drum synthesizer
 /// Combines tonal component (oscillators) + noise component
@@ -18,10 +20,11 @@ pub struct SnareDrum {
     noise_envelope: Envelope,
 
     vca: VCA,
+    parameters: Option<Arc<SnareParameters>>,  // Optional for backward compatibility
 }
 
 impl SnareDrum {
-    /// Create new snare drum synthesizer
+    /// Create new snare drum synthesizer with default hardcoded parameters
     pub fn new(sample_rate: f32) -> Self {
         let mut snare = Self {
             osc1: Oscillator::new(sample_rate),
@@ -31,6 +34,7 @@ impl SnareDrum {
             noise_filter: OnePoleFilter::new(sample_rate, 5000.0), // Bright noise
             noise_envelope: Envelope::new(sample_rate),
             vca: VCA::new(),
+            parameters: None,
         };
 
         // Set oscillators to sine wave for tonal body
@@ -50,8 +54,61 @@ impl SnareDrum {
         snare
     }
 
+    /// Create new snare drum synthesizer with parameters for real-time control
+    pub fn new_with_parameters(sample_rate: f32, parameters: Arc<SnareParameters>) -> Self {
+        let mut snare = Self {
+            osc1: Oscillator::new(sample_rate),
+            osc2: Oscillator::new(sample_rate),
+            tone_envelope: Envelope::new(sample_rate),
+            noise: NoiseGenerator::new(),
+            noise_filter: OnePoleFilter::new(sample_rate, 5000.0),
+            noise_envelope: Envelope::new(sample_rate),
+            vca: VCA::new(),
+            parameters: Some(parameters),
+        };
+
+        // Set oscillators to sine wave for tonal body
+        snare.osc1.set_waveform(Waveform::Sine);
+        snare.osc2.set_waveform(Waveform::Sine);
+
+        // Load initial parameters
+        snare.update_from_parameters();
+
+        snare
+    }
+
+    /// Update internal state from parameters (called once per trigger for efficiency)
+    fn update_from_parameters(&mut self) {
+        if let Some(params) = &self.parameters {
+            use std::sync::atomic::Ordering;
+
+            // Load all parameters atomically
+            let tone_freq = params.tone_freq.load(Ordering::Relaxed);
+            let _tone_mix = params.tone_mix.load(Ordering::Relaxed);
+            let decay = params.decay.load(Ordering::Relaxed);
+            let snap = params.snap.load(Ordering::Relaxed);
+
+            // Update oscillator frequencies (maintain harmonic relationship)
+            self.osc1.set_frequency(tone_freq);
+            self.osc2.set_frequency(tone_freq * 1.83);  // Harmonic ratio
+
+            // Decay affects both envelopes
+            self.tone_envelope.set_adsr(0.001, decay * 0.5, 0.0, 0.0);  // Tone is shorter
+            self.noise_envelope.set_adsr(0.001, decay, 0.0, 0.0);
+
+            // Snap affects noise attack time - higher snap = faster attack
+            let noise_attack = 0.001 * (1.0 - snap * 0.8);  // Range: 0.001s to 0.0002s
+            self.noise_envelope.set_adsr(noise_attack, decay, 0.0, 0.0);
+
+            // Note: tone_mix will be applied in next_sample during mixing
+        }
+    }
+
     /// Trigger the snare drum
     pub fn trigger(&mut self) {
+        // Update parameters before triggering if using parameter control
+        self.update_from_parameters();
+
         self.osc1.reset();
         self.osc2.reset();
         self.noise_filter.reset();

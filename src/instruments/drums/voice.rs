@@ -1,4 +1,4 @@
-use super::{hat::HiHat, kick::KickDrum, snare::SnareDrum, types::DrumType};
+use super::{hat::HiHat, kick::KickDrum, snare::SnareDrum, types::DrumType, parameters::DrumParameters};
 
 /// Unified drum voice that wraps all drum types
 pub enum DrumVoice {
@@ -8,12 +8,21 @@ pub enum DrumVoice {
 }
 
 impl DrumVoice {
-    /// Create new drum voice of the specified type
+    /// Create new drum voice of the specified type with default hardcoded parameters
     pub fn new(drum_type: DrumType, sample_rate: f32) -> Self {
         match drum_type {
             DrumType::Kick => DrumVoice::Kick(KickDrum::new(sample_rate)),
             DrumType::Snare => DrumVoice::Snare(SnareDrum::new(sample_rate)),
             DrumType::Hat => DrumVoice::Hat(HiHat::new(sample_rate)),
+        }
+    }
+
+    /// Create new drum voice with parameters for real-time control
+    pub fn new_with_parameters(sample_rate: f32, parameters: DrumParameters) -> Self {
+        match parameters {
+            DrumParameters::Kick(params) => DrumVoice::Kick(KickDrum::new_with_parameters(sample_rate, params)),
+            DrumParameters::Snare(params) => DrumVoice::Snare(SnareDrum::new_with_parameters(sample_rate, params)),
+            DrumParameters::Hat(params) => DrumVoice::Hat(HiHat::new_with_parameters(sample_rate, params)),
         }
     }
 
