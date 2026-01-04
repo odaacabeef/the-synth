@@ -2,7 +2,7 @@ devices:
   midiin: mc-out-a
   audioout: Blackhole 16ch
 
-synths:
+poly16s:
 
   - midich: 1
     audioch: 1

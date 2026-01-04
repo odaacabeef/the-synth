@@ -162,7 +162,7 @@ fn run_config_mode(
     let mut instances = Vec::new();
     let mut all_parameters = Vec::new();
 
-    for synth_config in &config.synths {
+    for synth_config in &config.poly16s {
         let params = Arc::new(SynthParameters::default());
 
         // Set ADSR parameters
@@ -281,7 +281,7 @@ fn run_config_mode(
     // Create multi-instance app
     let mut app = App::new_multi_instance(
         all_parameters,
-        config.synths.clone(),
+        config.poly16s.clone(),
         drum_parameters,
         config.drums.clone(),
     );
