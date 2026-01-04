@@ -2,7 +2,7 @@ use crossbeam_channel::{unbounded, Receiver, Sender};
 use std::sync::Arc;
 
 use super::{engine::SynthEngine, parameters::SynthParameters};
-use crate::instruments::drums::{DrumEngine, DrumType, DrumParameters};
+use crate::instruments::drums::{DrumEngine, DrumParameters};
 use crate::types::events::SynthEvent;
 
 /// Specification for creating an engine instance
@@ -12,7 +12,6 @@ pub enum EngineSpec {
         midi_channel: u8,
     },
     Drum {
-        drum_type: DrumType,
         trigger_note: u8,
         midi_channel: u8,
         parameters: DrumParameters,
@@ -91,7 +90,6 @@ impl MultiEngineSynth {
                     EngineType::Synth(synth_engine)
                 }
                 EngineSpec::Drum {
-                    drum_type: _,
                     trigger_note,
                     midi_channel,
                     parameters,

@@ -21,6 +21,7 @@ pub struct KickDrum {
 
 impl KickDrum {
     /// Create new kick drum synthesizer with default hardcoded parameters
+    #[allow(dead_code)]
     pub fn new(sample_rate: f32) -> Self {
         let mut kick = Self {
             oscillator: Oscillator::new(sample_rate),

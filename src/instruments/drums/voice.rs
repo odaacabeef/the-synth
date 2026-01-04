@@ -9,6 +9,7 @@ pub enum DrumVoice {
 
 impl DrumVoice {
     /// Create new drum voice of the specified type with default hardcoded parameters
+    #[allow(dead_code)]
     pub fn new(drum_type: DrumType, sample_rate: f32) -> Self {
         match drum_type {
             DrumType::Kick => DrumVoice::Kick(KickDrum::new(sample_rate)),

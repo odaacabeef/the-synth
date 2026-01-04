@@ -49,10 +49,12 @@ impl OnePoleFilter {
 }
 
 /// High-pass filter implemented as input minus low-pass
+#[allow(dead_code)]
 pub struct HighPassFilter {
     low_pass: OnePoleFilter,
 }
 
+#[allow(dead_code)]
 impl HighPassFilter {
     /// Create new high-pass filter
     ///

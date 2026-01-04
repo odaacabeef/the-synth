@@ -230,7 +230,6 @@ fn run_config_mode(
 
         instances.push((
             EngineSpec::Drum {
-                drum_type: drum_config.drum_type,
                 trigger_note,
                 midi_channel: drum_config.midi_channel_filter(),
                 parameters: params.clone(),

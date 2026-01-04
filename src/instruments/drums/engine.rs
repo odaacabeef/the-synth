@@ -21,6 +21,7 @@ impl DrumEngine {
     /// * `sample_rate` - Audio sample rate in Hz
     /// * `midi_channel_filter` - MIDI channel to listen to (0-15, or 255 for omni)
     /// * `event_rx` - Channel receiver for MIDI events
+    #[allow(dead_code)]
     pub fn new(
         drum_type: DrumType,
         trigger_note: u8,

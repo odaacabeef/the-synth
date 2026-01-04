@@ -31,6 +31,7 @@ pub struct SnareDrum {
 
 impl SnareDrum {
     /// Create new snare drum synthesizer with default hardcoded parameters
+    #[allow(dead_code)]
     pub fn new(sample_rate: f32) -> Self {
         let mut snare = Self {
             osc1: Oscillator::new(sample_rate),

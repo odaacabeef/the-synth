@@ -14,6 +14,7 @@ pub struct HiHat {
 
 impl HiHat {
     /// Create new hi-hat synthesizer with default hardcoded parameters
+    #[allow(dead_code)]
     pub fn new(sample_rate: f32) -> Self {
         let mut hat = Self {
             noise: NoiseGenerator::new(),
