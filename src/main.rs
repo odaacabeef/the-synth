@@ -339,8 +339,9 @@ where
             }
 
             // Periodically send voice states to UI
+            // Update every ~5ms (220 frames @ 44100 Hz) for responsive drum hit display
             frame_counter += frames as u64;
-            if frame_counter > 4410 {
+            if frame_counter > 220 {
                 let _ = voice_tx.try_send(multi_engine.all_voice_states());
                 frame_counter = 0;
             }

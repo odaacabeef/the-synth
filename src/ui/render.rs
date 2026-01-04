@@ -203,7 +203,7 @@ fn build_drum_lines(
     lines.push(format!("  m{}:a{}", midi_ch_str, config.audioch));
     lines.push(String::new()); // Blank line
 
-    // Parameters based on drum type (MOVED ABOVE type & note)
+    // Parameters based on drum type
     match config.drum_type {
         DrumType::Kick => {
             add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickPitchStart, "PitchStart", format!("{}Hz", config.kick_pitch_start));
@@ -217,32 +217,34 @@ fn build_drum_lines(
             add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::SnareToneMix, "ToneMix", format!("{:.2}", config.snare_tone_mix));
             add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::SnareDecay, "Decay", format!("{:.3}s", config.snare_decay));
             add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::SnareSnap, "Snap", format!("{:.2}", config.snare_snap));
+            lines.push(String::new()); // Blank line (snare has 4 params, need 5 lines)
         }
         DrumType::Hat => {
             add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::HatBrightness, "Brightness", format!("{}Hz", config.hat_brightness));
             add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::HatDecay, "Decay", format!("{:.3}s", config.hat_decay));
             add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::HatMetallic, "Metallic", format!("{:.2}", config.hat_metallic));
+            lines.push(String::new()); // Blank line (hat has 3 params, need 5 lines)
+            lines.push(String::new()); // Another blank
         }
     }
 
-    lines.push(String::new()); // Blank line
+    lines.push(String::new()); // Blank line (line 8)
+    lines.push(String::new()); // Blank line (line 9, where synth Wave is)
 
-    // Drum type
-    let drum_type_str = config.drum_type.name();
-    lines.push(format!("  Type: {}", drum_type_str));
-
-    // Trigger note
-    let note_num = config.parse_note().unwrap_or(0);
-    let note_name = midi_note_to_name(note_num);
-    lines.push(format!("  Note: {} ({})", note_name, note_num));
-
-    lines.push(String::new()); // Blank line
-
-    // Voice state indicator
-    let state_indicator = if voice_state.is_some() { "[X]" } else { "[ ]" };
+    // Voice state indicator on line 10 (matching synth voice states)
+    let state_indicator = if voice_state.is_some() { "(X)" } else { "---" };
     lines.push(format!("  {}", state_indicator));
 
-    // Add blank lines to match synth height
+    lines.push(String::new()); // Blank line (line 11)
+    lines.push(String::new()); // Blank line (line 12)
+
+    // Type and note on line 13 (compact format, lowercase)
+    let drum_type_str = config.drum_type.name().to_lowercase();
+    let note_num = config.parse_note().unwrap_or(0);
+    let note_name = midi_note_to_name(note_num);
+    lines.push(format!("  {}: {} ({})", drum_type_str, note_name, note_num));
+
+    // Add blank lines to match synth height (16 lines total)
     while lines.len() < 16 {
         lines.push(String::new());
     }
