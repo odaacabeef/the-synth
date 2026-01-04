@@ -1,5 +1,5 @@
 use std::sync::{atomic::Ordering, Arc};
-use crate::audio::parameters::SynthParameters;
+use crate::instruments::poly16::SynthParameters;
 use crate::config::{DrumInstanceConfig, SynthInstanceConfig};
 use crate::instruments::drums::{DrumParameters, DrumType};
 

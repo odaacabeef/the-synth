@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::audio::parameters::AtomicF32;
+use crate::instruments::poly16::parameters::AtomicF32;
 use super::types::DrumType;
 
 /// Kick drum parameters - thread-safe for real-time audio

@@ -21,7 +21,7 @@ use std::{
 };
 
 use audio::multi_engine::{EngineSpec, MultiEngineSynth};
-use audio::parameters::SynthParameters;
+use instruments::poly16::SynthParameters;
 use config::SynthConfig;
 use midi::handler::MidiHandler;
 use ui::{app::App, events, render};

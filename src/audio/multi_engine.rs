@@ -1,7 +1,7 @@
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use std::sync::Arc;
 
-use super::{engine::SynthEngine, parameters::SynthParameters};
+use crate::instruments::poly16::{SynthEngine, SynthParameters};
 use crate::instruments::drums::{DrumEngine, DrumParameters};
 use crate::types::events::SynthEvent;
 
@@ -172,7 +172,7 @@ impl MultiEngineSynth {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::parameters::SynthParameters;
+    use crate::instruments::poly16::SynthParameters;
 
     #[test]
     fn test_multi_engine_creation() {
