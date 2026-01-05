@@ -1,5 +1,5 @@
 devices:
-  midiin: mc-out-a
+  midiin: mc-source-a
   audioout: Blackhole 16ch
 
 poly16s:
