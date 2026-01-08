@@ -4,9 +4,13 @@
 build:
 	cargo build --release
 
-# Run the project
-run:
-	cargo run -- --config example-config.yaml
+# Run the project with basic example
+run-basic:
+	cargo run -- --config examples/basic.yaml
+
+# Run the project with cv example
+run-cv:
+	cargo run -- --config examples/cv.yaml
 
 # List all available MIDI input and audio output devices
 list:

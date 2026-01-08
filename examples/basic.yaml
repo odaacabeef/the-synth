@@ -1,3 +1,5 @@
+# "basic" configuration using poly16 and drum instruments.
+
 devices:
   midiin: mc-source-a
   audioout: Blackhole 16ch
