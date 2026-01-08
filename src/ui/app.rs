@@ -1,7 +1,8 @@
 use std::sync::{atomic::Ordering, Arc};
 use crate::instruments::poly16::SynthParameters;
-use crate::config::{DrumInstanceConfig, SynthInstanceConfig};
+use crate::config::{CVInstanceConfig, DrumInstanceConfig, SynthInstanceConfig};
 use crate::instruments::drums::{DrumParameters, DrumType};
+use crate::instruments::cv::CVParameters;
 
 /// UI application state
 /// Tracks all editable parameters and UI state
@@ -10,6 +11,8 @@ pub struct App {
     pub selected_param: Parameter,
     /// Currently selected drum parameter for editing (drums)
     pub selected_drum_param: DrumParameter,
+    /// Currently selected CV parameter for editing (CVs)
+    pub selected_cv_param: CVParameter,
     /// Multiple synth instances
     pub multi_instances: Vec<MultiInstance>,
     /// Currently selected instance index
@@ -30,6 +33,11 @@ pub enum MultiInstance {
     Drum {
         config: DrumInstanceConfig,
         parameters: DrumParameters,
+        voice_state: Option<u8>,
+    },
+    CV {
+        config: CVInstanceConfig,
+        parameters: Arc<CVParameters>,
         voice_state: Option<u8>,
     },
 }
@@ -62,6 +70,12 @@ pub enum DrumParameter {
     HatMetallic,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CVParameter {
+    Transpose,
+    Glide,
+}
+
 impl App {
     /// Create new app in multi-instance mode (config mode)
     pub fn new_multi_instance(
@@ -69,6 +83,8 @@ impl App {
         synth_configs: Vec<SynthInstanceConfig>,
         drum_parameters: Vec<DrumParameters>,
         drum_configs: Vec<DrumInstanceConfig>,
+        cv_parameters: Vec<Arc<CVParameters>>,
+        cv_configs: Vec<CVInstanceConfig>,
     ) -> Self {
         let mut multi_instances = Vec::new();
 
@@ -84,6 +100,15 @@ impl App {
         // Add drum instances
         for (params, config) in drum_parameters.into_iter().zip(drum_configs.into_iter()) {
             multi_instances.push(MultiInstance::Drum {
+                config,
+                parameters: params,
+                voice_state: None,
+            });
+        }
+
+        // Add CV instances
+        for (params, config) in cv_parameters.into_iter().zip(cv_configs.into_iter()) {
+            multi_instances.push(MultiInstance::CV {
                 config,
                 parameters: params,
                 voice_state: None,
@@ -109,6 +134,7 @@ impl App {
         Self {
             selected_param: Parameter::Attack,
             selected_drum_param,
+            selected_cv_param: CVParameter::Transpose,
             multi_instances,
             current_instance: 0,
             should_quit: false,
@@ -211,6 +237,10 @@ impl App {
                         _ => 0,
                     },
                 },
+                MultiInstance::CV { .. } => match self.selected_cv_param {
+                    CVParameter::Transpose => 0,
+                    CVParameter::Glide => 1,
+                },
             }
         } else {
             0
@@ -262,6 +292,13 @@ impl App {
                         }
                     };
                 }
+                MultiInstance::CV { .. } => {
+                    // CV has 2 parameters (0-1)
+                    self.selected_cv_param = match index {
+                        0 => CVParameter::Transpose,
+                        _ => CVParameter::Glide, // 1 or higher
+                    };
+                }
             }
         }
     }
@@ -278,6 +315,10 @@ impl App {
                     }
                     MultiInstance::Drum { voice_state: vs, .. } => {
                         // For drums, take the first active voice (if any)
+                        *vs = voice_states.iter().find(|v| v.is_some()).copied().flatten();
+                    }
+                    MultiInstance::CV { voice_state: vs, .. } => {
+                        // For CV, take the first active voice (monophonic)
                         *vs = voice_states.iter().find(|v| v.is_some()).copied().flatten();
                     }
                 }
@@ -361,10 +402,27 @@ impl App {
         };
     }
 
+    /// Cycle to next CV parameter
+    pub fn next_cv_parameter(&mut self) {
+        self.selected_cv_param = match self.selected_cv_param {
+            CVParameter::Transpose => CVParameter::Glide,
+            CVParameter::Glide => CVParameter::Transpose,
+        };
+    }
+
+    /// Cycle to previous CV parameter
+    pub fn prev_cv_parameter(&mut self) {
+        self.selected_cv_param = match self.selected_cv_param {
+            CVParameter::Transpose => CVParameter::Glide,
+            CVParameter::Glide => CVParameter::Transpose,
+        };
+    }
+
     /// Increase selected parameter value
     pub fn increase_value(&mut self) {
         let selected = self.selected_param;
         let selected_drum_param = self.selected_drum_param;
+        let selected_cv_param = self.selected_cv_param;
 
         if let Some(instance) = self.current_instance_mut() {
             match instance {
@@ -451,6 +509,17 @@ impl App {
                     }
                     self.sync_multi_instance_to_audio();
                 }
+                MultiInstance::CV { config, .. } => {
+                    match selected_cv_param {
+                        CVParameter::Transpose => {
+                            config.transpose = (config.transpose + 1).min(24);
+                        }
+                        CVParameter::Glide => {
+                            config.glide = (config.glide + 0.05).min(2.0);
+                        }
+                    }
+                    self.sync_multi_instance_to_audio();
+                }
             }
         }
     }
@@ -459,6 +528,7 @@ impl App {
     pub fn decrease_value(&mut self) {
         let selected = self.selected_param;
         let selected_drum_param = self.selected_drum_param;
+        let selected_cv_param = self.selected_cv_param;
 
         if let Some(instance) = self.current_instance_mut() {
             match instance {
@@ -545,6 +615,17 @@ impl App {
                     }
                     self.sync_multi_instance_to_audio();
                 }
+                MultiInstance::CV { config, .. } => {
+                    match selected_cv_param {
+                        CVParameter::Transpose => {
+                            config.transpose = (config.transpose - 1).max(-24);
+                        }
+                        CVParameter::Glide => {
+                            config.glide = (config.glide - 0.05).max(0.0);
+                        }
+                    }
+                    self.sync_multi_instance_to_audio();
+                }
             }
         }
     }
@@ -600,6 +681,14 @@ impl App {
                             hat_params.metallic.store(config.hat_metallic, Ordering::Relaxed);
                         }
                     }
+                }
+                MultiInstance::CV {
+                    config,
+                    parameters,
+                    ..
+                } => {
+                    parameters.transpose.store(config.transpose, Ordering::Relaxed);
+                    parameters.glide.store(config.glide, Ordering::Relaxed);
                 }
             }
         }

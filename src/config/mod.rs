@@ -16,6 +16,9 @@ pub struct SynthConfig {
 
     #[serde(default)]
     pub drums: Vec<DrumInstanceConfig>,
+
+    #[serde(default)]
+    pub cvs: Vec<CVInstanceConfig>,
 }
 
 impl SynthConfig {
@@ -34,10 +37,10 @@ impl SynthConfig {
 
     /// Validate the configuration
     pub fn validate(&self) -> Result<()> {
-        // Allow empty poly16s if we have drums
-        if self.poly16s.is_empty() && self.drums.is_empty() {
+        // Allow empty poly16s if we have drums or CVs
+        if self.poly16s.is_empty() && self.drums.is_empty() && self.cvs.is_empty() {
             return Err(anyhow!(
-                "Configuration must have at least one poly16 or drum instance"
+                "Configuration must have at least one poly16, drum, or CV instance"
             ));
         }
 
@@ -50,6 +53,11 @@ impl SynthConfig {
         for (idx, drum) in self.drums.iter().enumerate() {
             drum.validate()
                 .with_context(|| format!("Invalid configuration for drum instance {}", idx))?;
+        }
+
+        for (idx, cv) in self.cvs.iter().enumerate() {
+            cv.validate()
+                .with_context(|| format!("Invalid configuration for CV instance {}", idx))?;
         }
 
         Ok(())
@@ -324,6 +332,71 @@ impl DrumInstanceConfig {
     }
 }
 
+/// CV instance configuration
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CVInstanceConfig {
+    pub midich: MidiChannelSpec,
+    pub audioch: usize, // Pitch CV output (Gate will be audioch + 1)
+
+    #[serde(default = "default_cv_transpose")]
+    pub transpose: i8, // Transpose in semitones (-24 to +24)
+
+    #[serde(default = "default_cv_glide")]
+    pub glide: f32, // Glide time in seconds (0.0 to 2.0)
+}
+
+impl CVInstanceConfig {
+    /// Validate this CV instance configuration
+    pub fn validate(&self) -> Result<()> {
+        // Validate MIDI channel (1-16)
+        match &self.midich {
+            MidiChannelSpec::Channel(ch) => {
+                if *ch < 1 || *ch > 16 {
+                    return Err(anyhow!("MIDI channel must be between 1 and 16"));
+                }
+            }
+            MidiChannelSpec::Omni(_) => {
+                // Always valid
+            }
+        }
+
+        // Validate audio channel (1-indexed, must be >= 1)
+        if self.audioch < 1 {
+            return Err(anyhow!("Audio channel must be >= 1 (channels are 1-indexed)"));
+        }
+
+        // Validate transpose range
+        if self.transpose < -24 || self.transpose > 24 {
+            return Err(anyhow!("Transpose must be between -24 and +24 semitones"));
+        }
+
+        // Validate glide time
+        if self.glide < 0.0 || self.glide > 2.0 {
+            return Err(anyhow!("Glide must be between 0.0 and 2.0 seconds"));
+        }
+
+        Ok(())
+    }
+
+    /// Get the 0-indexed audio channel for internal use (pitch CV)
+    pub fn audio_channel_index(&self) -> usize {
+        self.audioch.saturating_sub(1)
+    }
+
+    /// Get the 0-indexed gate channel for internal use
+    pub fn gate_channel_index(&self) -> usize {
+        self.audioch // Gate is next channel (audioch is 1-indexed, so audioch as 0-indexed is audioch+1 in 1-indexed)
+    }
+
+    /// Get the MIDI channel filter value (0-15 for specific channel, 255 for omni)
+    pub fn midi_channel_filter(&self) -> u8 {
+        match &self.midich {
+            MidiChannelSpec::Channel(ch) => ch - 1, // Convert 1-16 to 0-15
+            MidiChannelSpec::Omni(_) => 255,        // Omni mode
+        }
+    }
+}
+
 /// MIDI channel specification - either a specific channel (1-16) or omni
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
@@ -418,6 +491,15 @@ fn default_hat_decay() -> f32 {
 
 fn default_hat_metallic() -> f32 {
     0.4
+}
+
+// CV defaults
+fn default_cv_transpose() -> i8 {
+    0
+}
+
+fn default_cv_glide() -> f32 {
+    0.0
 }
 
 #[cfg(test)]

@@ -44,6 +44,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                     MultiInstance::Drum { config, .. } => {
                         app.next_drum_parameter(config.drum_type);
                     }
+                    MultiInstance::CV { .. } => {
+                        app.next_cv_parameter();
+                    }
                 }
             }
         }
@@ -56,6 +59,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                     }
                     MultiInstance::Drum { config, .. } => {
                         app.prev_drum_parameter(config.drum_type);
+                    }
+                    MultiInstance::CV { .. } => {
+                        app.prev_cv_parameter();
                     }
                 }
             }
