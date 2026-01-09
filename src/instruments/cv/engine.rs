@@ -64,18 +64,10 @@ impl CVEngine {
 
             match event {
                 SynthEvent::NoteOn { note, .. } => {
-                    // Apply transpose
-                    let transpose = self.parameters.transpose.load(Ordering::Relaxed);
-                    let transposed_note = (note as i16 + transpose as i16).clamp(0, 127) as u8;
-
-                    self.voice.note_on(transposed_note);
+                    self.voice.note_on(note);
                 }
                 SynthEvent::NoteOff { note, .. } => {
-                    // Apply transpose
-                    let transpose = self.parameters.transpose.load(Ordering::Relaxed);
-                    let transposed_note = (note as i16 + transpose as i16).clamp(0, 127) as u8;
-
-                    self.voice.note_off(transposed_note);
+                    self.voice.note_off(note);
                 }
                 SynthEvent::AllNotesOff { .. } => {
                     self.voice.all_notes_off();
@@ -83,9 +75,12 @@ impl CVEngine {
             }
         }
 
-        // Update glide time from parameters
+        // Update parameters from UI thread
         let glide = self.parameters.glide.load(Ordering::Relaxed);
         self.voice.set_glide_time(glide);
+
+        let transpose = self.parameters.transpose.load(Ordering::Relaxed);
+        self.voice.set_transpose(transpose);
 
         // Generate CV samples
         for i in 0..pitch_output.len() {
@@ -104,14 +99,10 @@ impl CVEngine {
 
             match event {
                 SynthEvent::NoteOn { note, .. } => {
-                    let transpose = self.parameters.transpose.load(Ordering::Relaxed);
-                    let transposed_note = (note as i16 + transpose as i16).clamp(0, 127) as u8;
-                    self.voice.note_on(transposed_note);
+                    self.voice.note_on(note);
                 }
                 SynthEvent::NoteOff { note, .. } => {
-                    let transpose = self.parameters.transpose.load(Ordering::Relaxed);
-                    let transposed_note = (note as i16 + transpose as i16).clamp(0, 127) as u8;
-                    self.voice.note_off(transposed_note);
+                    self.voice.note_off(note);
                 }
                 SynthEvent::AllNotesOff { .. } => {
                     self.voice.all_notes_off();
@@ -119,9 +110,12 @@ impl CVEngine {
             }
         }
 
-        // Update glide
+        // Update parameters
         let glide = self.parameters.glide.load(Ordering::Relaxed);
         self.voice.set_glide_time(glide);
+
+        let transpose = self.parameters.transpose.load(Ordering::Relaxed);
+        self.voice.set_transpose(transpose);
 
         // Generate pitch CV only
         for sample in output.iter_mut() {

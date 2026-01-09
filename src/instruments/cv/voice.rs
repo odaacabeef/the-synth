@@ -10,6 +10,9 @@ pub struct CVVoice {
     current_pitch: f32, // Current CV pitch in volts
     target_pitch: f32,  // Target CV pitch in volts
 
+    // Transpose in semitones
+    transpose: i8,
+
     // Glide state
     glide_time: f32,       // Glide time in seconds
     glide_step: f32,       // Fixed step size per sample for linear glide
@@ -29,6 +32,7 @@ impl CVVoice {
             note_stack_capacity: MAX_NOTES,
             current_pitch: 0.0,
             target_pitch: 0.0,
+            transpose: 0,
             glide_time: 0.0,
             glide_step: 0.0,
             glide_samples_left: 0.0,
@@ -38,8 +42,9 @@ impl CVVoice {
 
     /// Convert MIDI note to CV voltage (1V/octave, C4 = 0V)
     /// Scaled for -10V to +10V audio interface range (normalized -1.0 to +1.0)
-    fn note_to_voltage(note: u8) -> f32 {
-        (note as f32 - 60.0) / 120.0
+    fn note_to_voltage(note: u8, transpose: i8) -> f32 {
+        let transposed_note = (note as i16 + transpose as i16).clamp(0, 127);
+        (transposed_note as f32 - 60.0) / 120.0
     }
 
     /// Handle note on event
@@ -54,8 +59,8 @@ impl CVVoice {
             }
         }
 
-        // Update target pitch to new note
-        self.target_pitch = Self::note_to_voltage(note);
+        // Update target pitch to new note (with current transpose)
+        self.target_pitch = Self::note_to_voltage(note, self.transpose);
 
         // If gate is off, jump immediately to target (no glide on first note)
         if !self.gate_high {
@@ -83,7 +88,7 @@ impl CVVoice {
 
         // Otherwise, switch to most recent note in stack (last-note priority)
         if let Some(&last_note) = self.note_stack.last() {
-            self.target_pitch = Self::note_to_voltage(last_note);
+            self.target_pitch = Self::note_to_voltage(last_note, self.transpose);
             self.start_glide();
         }
     }
@@ -97,6 +102,18 @@ impl CVVoice {
     /// Set glide time
     pub fn set_glide_time(&mut self, time: f32) {
         self.glide_time = time;
+    }
+
+    /// Set transpose and update current note pitch if held
+    pub fn set_transpose(&mut self, transpose: i8) {
+        self.transpose = transpose;
+
+        // If a note is currently held, recalculate its target pitch with new transpose
+        if let Some(&current_note) = self.note_stack.last() {
+            self.target_pitch = Self::note_to_voltage(current_note, self.transpose);
+            // Optionally start a glide to the new transposed pitch
+            self.start_glide();
+        }
     }
 
     /// Start a new glide to the current target pitch
@@ -158,10 +175,14 @@ mod tests {
 
     #[test]
     fn test_note_to_voltage() {
-        assert_eq!(CVVoice::note_to_voltage(60), 0.0); // C4 = 0V (normalized)
-        assert!((CVVoice::note_to_voltage(72) - 0.1).abs() < 0.001); // C5 = 1V = 0.1 normalized
-        assert!((CVVoice::note_to_voltage(48) + 0.1).abs() < 0.001); // C3 = -1V = -0.1 normalized
-        assert!((CVVoice::note_to_voltage(69) - 0.075).abs() < 0.001); // A4 = 0.75V = 0.075 normalized
+        assert_eq!(CVVoice::note_to_voltage(60, 0), 0.0); // C4 = 0V (normalized)
+        assert!((CVVoice::note_to_voltage(72, 0) - 0.1).abs() < 0.001); // C5 = 1V = 0.1 normalized
+        assert!((CVVoice::note_to_voltage(48, 0) + 0.1).abs() < 0.001); // C3 = -1V = -0.1 normalized
+        assert!((CVVoice::note_to_voltage(69, 0) - 0.075).abs() < 0.001); // A4 = 0.75V = 0.075 normalized
+
+        // Test transpose
+        assert!((CVVoice::note_to_voltage(60, 12) - 0.1).abs() < 0.001); // C4 + 12 = C5 = 1V = 0.1 normalized
+        assert!((CVVoice::note_to_voltage(60, -12) + 0.1).abs() < 0.001); // C4 - 12 = C3 = -1V = -0.1 normalized
     }
 
     #[test]
