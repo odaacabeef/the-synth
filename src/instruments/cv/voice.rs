@@ -11,8 +11,9 @@ pub struct CVVoice {
     target_pitch: f32,  // Target CV pitch in volts
 
     // Glide state
-    glide_time: f32,  // Glide time in seconds
-    glide_delta: f32, // Per-sample glide increment
+    glide_time: f32,       // Glide time in seconds
+    glide_step: f32,       // Fixed step size per sample for linear glide
+    glide_samples_left: f32, // Samples remaining in glide
 
     // Gate state
     gate_high: bool,
@@ -29,7 +30,8 @@ impl CVVoice {
             current_pitch: 0.0,
             target_pitch: 0.0,
             glide_time: 0.0,
-            glide_delta: 0.0,
+            glide_step: 0.0,
+            glide_samples_left: 0.0,
             gate_high: false,
         }
     }
@@ -58,10 +60,11 @@ impl CVVoice {
         // If gate is off, jump immediately to target (no glide on first note)
         if !self.gate_high {
             self.current_pitch = self.target_pitch;
+            self.glide_samples_left = 0.0;
+        } else {
+            // Calculate linear glide step for legato notes
+            self.start_glide();
         }
-
-        // Recalculate glide delta
-        self.update_glide_delta();
 
         // Gate on
         self.gate_high = true;
@@ -81,7 +84,7 @@ impl CVVoice {
         // Otherwise, switch to most recent note in stack (last-note priority)
         if let Some(&last_note) = self.note_stack.last() {
             self.target_pitch = Self::note_to_voltage(last_note);
-            self.update_glide_delta();
+            self.start_glide();
         }
     }
 
@@ -94,31 +97,35 @@ impl CVVoice {
     /// Set glide time
     pub fn set_glide_time(&mut self, time: f32) {
         self.glide_time = time;
-        self.update_glide_delta();
     }
 
-    /// Update glide delta based on current glide time
-    fn update_glide_delta(&mut self) {
-        if self.glide_time <= 0.0 {
-            self.glide_delta = 1.0; // Instant
+    /// Start a new glide to the current target pitch
+    fn start_glide(&mut self) {
+        let distance = self.target_pitch - self.current_pitch;
+
+        if self.glide_time <= 0.0 || distance.abs() < 0.0001 {
+            // Instant glide or already at target
+            self.current_pitch = self.target_pitch;
+            self.glide_step = 0.0;
+            self.glide_samples_left = 0.0;
         } else {
-            // Delta per sample to reach target in glide_time seconds
-            self.glide_delta = 1.0 / (self.glide_time * self.sample_rate);
+            // Calculate linear glide: distance / time_in_samples
+            let total_samples = self.glide_time * self.sample_rate;
+            self.glide_step = distance / total_samples;
+            self.glide_samples_left = total_samples;
         }
     }
 
     /// Generate next pitch CV sample
     pub fn next_pitch_sample(&mut self) -> f32 {
-        // Apply glide: move current toward target
-        if (self.current_pitch - self.target_pitch).abs() > 0.0001 {
-            let diff = self.target_pitch - self.current_pitch;
-            let step = diff * self.glide_delta;
+        // Apply linear glide if in progress
+        if self.glide_samples_left > 0.0 {
+            self.current_pitch += self.glide_step;
+            self.glide_samples_left -= 1.0;
 
-            // Clamp to target if very close
-            if step.abs() > diff.abs() {
+            // Snap to target when done
+            if self.glide_samples_left <= 0.0 {
                 self.current_pitch = self.target_pitch;
-            } else {
-                self.current_pitch += step;
             }
         }
 
@@ -191,14 +198,13 @@ mod tests {
         voice.note_on(72); // C5 = 1V = 0.1 normalized
         assert!((voice.target_pitch - 0.1).abs() < 0.001);
 
-        // Should glide smoothly (exponential decay reaches ~63% in one time constant)
+        // Should glide linearly over 100ms (4410 samples at 44.1kHz)
         for _ in 0..4410 {
-            // 100ms at 44.1kHz
             voice.next_pitch_sample();
         }
 
-        // Should be approaching target (exponential decay)
-        assert!((voice.current_pitch - 0.1).abs() < 0.04);
+        // Should reach target exactly with linear glide
+        assert!((voice.current_pitch - 0.1).abs() < 0.0001);
     }
 
     #[test]
