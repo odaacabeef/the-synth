@@ -240,6 +240,27 @@ fn run_config_mode(
         drum_parameters.push(params);
     }
 
+    // Create engine specs for each CV instance
+    let mut cv_parameters = Vec::new();
+
+    for cv_config in &config.cvs {
+        // Create CV parameters from config
+        let params = Arc::new(instruments::cv::CVParameters::new_with_config(
+            cv_config.transpose,
+            cv_config.glide,
+        ));
+
+        instances.push((
+            EngineSpec::CV {
+                parameters: params.clone(),
+                midi_channel: cv_config.midi_channel_filter(),
+            },
+            cv_config.audio_channel_index(),
+        ));
+
+        cv_parameters.push(params);
+    }
+
     // Connect to MIDI device (no channel filtering - filtering happens per-engine)
     let dummy_params = Arc::new(SynthParameters::default());
     let _midi_handler = MidiHandler::new_with_device(event_tx, selected_midi_device, dummy_params)?;
@@ -253,6 +274,18 @@ fn run_config_mode(
 
     let audio_config = device.default_output_config()?;
     let num_channels = audio_config.channels() as usize;
+
+    // Validate CV instances have enough channels (each CV uses 2 consecutive channels)
+    for cv_config in &config.cvs {
+        let gate_ch = cv_config.gate_channel_index();
+        if gate_ch >= num_channels {
+            return Err(anyhow::anyhow!(
+                "CV instance requires gate channel {} but device only has {} channels",
+                gate_ch + 1, // Display as 1-indexed
+                num_channels
+            ));
+        }
+    }
 
     // Create voice state channels for UI
     let (voice_tx, voice_rx) = crossbeam_channel::unbounded::<Vec<[Option<u8>; 16]>>();
@@ -284,6 +317,8 @@ fn run_config_mode(
         config.poly16s.clone(),
         drum_parameters,
         config.drums.clone(),
+        cv_parameters,
+        config.cvs.clone(),
     );
 
     // Run UI loop

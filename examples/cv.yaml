@@ -1,0 +1,24 @@
+# Example configruation for sending control voltage to an ES-9
+# The 3.5mm ouputs on the ES-9 are numbered 9-16
+# https://www.expert-sleepers.co.uk/es9.html
+
+devices:
+  midiin: mc-source-a
+  audioout: ES-9
+
+cvs:
+
+  - midich: 1
+    audioch: 9   # pitch cv on 9, gate on 10
+    transpose: 0
+    glide: 0.1   # glide 0.1 second
+
+  - midich: 2
+    audioch: 11  # 11,12
+    transpose: 0
+    glide: 0.5
+
+  - midich: 3
+    audioch: 13    # 13,14
+    transpose: -12 # One octave down
+    glide: 0       # No glide

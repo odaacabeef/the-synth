@@ -4,7 +4,7 @@ use ratatui::{
     Frame,
 };
 
-use super::app::{App, MultiInstance, Parameter, DrumParameter};
+use super::app::{App, CVParameter, DrumParameter, MultiInstance, Parameter};
 use crate::instruments::drums::DrumType;
 
 /// Render the TUI
@@ -49,6 +49,7 @@ fn render_multi_instance(frame: &mut Frame, app: &App) {
             is_selected,
             app.selected_param,
             app.selected_drum_param,
+            app.selected_cv_param,
         );
 
         // Determine spacing: add divider before first drum
@@ -87,12 +88,13 @@ fn render_multi_instance(frame: &mut Frame, app: &App) {
     frame.render_widget(paragraph, frame.size());
 }
 
-/// Build lines for a single instrument instance (synth or drum)
+/// Build lines for a single instrument instance (synth, drum, or CV)
 fn build_instance_lines(
     instance: &MultiInstance,
     is_selected: bool,
     selected_param: Parameter,
     selected_drum_param: DrumParameter,
+    selected_cv_param: CVParameter,
 ) -> Vec<String> {
     match instance {
         MultiInstance::Synth {
@@ -105,6 +107,11 @@ fn build_instance_lines(
             voice_state,
             ..
         } => build_drum_lines(config, *voice_state, is_selected, selected_drum_param),
+        MultiInstance::CV {
+            config,
+            voice_state,
+            ..
+        } => build_cv_lines(config, *voice_state, is_selected, selected_cv_param),
     }
 }
 
@@ -287,6 +294,70 @@ fn add_drum_param_line(
         " "
     };
     lines.push(format!("{} {}: {}", cursor, name, value));
+}
+
+/// Build lines for a CV instance
+fn build_cv_lines(
+    config: &crate::config::CVInstanceConfig,
+    voice_state: Option<u8>,
+    is_selected: bool,
+    selected_cv_param: CVParameter,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+
+    // MIDI channel string
+    let midi_ch_str = if config.midi_channel_filter() == 255 {
+        "omni".to_string()
+    } else {
+        format!("{}", config.midi_channel_filter() + 1)
+    };
+
+    // Title: m<midi>:a<pitch>+<gate>
+    lines.push(format!(
+        "  m{}:a{}+{}",
+        midi_ch_str,
+        config.audioch,
+        config.audioch + 1
+    ));
+    lines.push(String::new());
+
+    // Transpose parameter
+    let cursor_transpose = if is_selected && selected_cv_param == CVParameter::Transpose {
+        ">"
+    } else {
+        " "
+    };
+    lines.push(format!("{} Transpose: {:+}", cursor_transpose, config.transpose));
+
+    // Glide parameter
+    let cursor_glide = if is_selected && selected_cv_param == CVParameter::Glide {
+        ">"
+    } else {
+        " "
+    };
+    lines.push(format!("{} Glide: {:.3}s", cursor_glide, config.glide));
+
+    // Blank lines for spacing
+    for _ in 0..5 {
+        lines.push(String::new());
+    }
+
+    // Current note and voltage display
+    if let Some(note) = voice_state {
+        let note_name = midi_note_to_name(note);
+        let voltage = (note as f32 - 60.0) / 12.0;
+        lines.push(format!("  {} ({:+.3}V)", note_name, voltage));
+    } else {
+        lines.push(format!("  --- (0.000V)"));
+    }
+
+    // Pad to match synth height
+    while lines.len() < 16 {
+        lines.push(String::new());
+    }
+
+    pad_lines(&mut lines);
+    lines
 }
 
 /// Pad all lines to same width for alignment
