@@ -158,11 +158,6 @@ impl CVVoice {
         }
     }
 
-    /// Check if any notes are held
-    pub fn is_active(&self) -> bool {
-        self.gate_high
-    }
-
     /// Get current note (if any)
     pub fn current_note(&self) -> Option<u8> {
         self.note_stack.last().copied()
@@ -191,7 +186,6 @@ mod tests {
 
         // First note
         voice.note_on(60); // C4
-        assert!(voice.is_active());
         assert_eq!(voice.current_note(), Some(60));
 
         // Second note (should switch)
@@ -204,7 +198,6 @@ mod tests {
 
         // Release first note (gate off)
         voice.note_off(60);
-        assert!(!voice.is_active());
         assert_eq!(voice.current_note(), None);
     }
 
