@@ -351,17 +351,6 @@ fn build_cv_lines(
         lines.push(format!("  --- (0.000V)"));
     }
 
-    lines.push(String::new()); // Blank
-    lines.push(String::new()); // Blank
-
-    // Gate state indicator
-    let gate_str = if voice_state.is_some() {
-        "GATE: HIGH"
-    } else {
-        "GATE: LOW "
-    };
-    lines.push(format!("  {}", gate_str));
-
     // Pad to match synth height
     while lines.len() < 16 {
         lines.push(String::new());
