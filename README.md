@@ -30,7 +30,7 @@ devices:
   midiin: "Your MIDI Device"    # Name or index from --list
   audioout: "Your Audio Device" # Name or index from --list
 
-poly16s:
+poly16:
   - midich: 1           # MIDI channel 1-16 or "omni"
     audioch: 1          # Audio output channel (1-indexed)
     attack: 0.01
@@ -75,7 +75,7 @@ drums:
     hdecay: 0.05
     metallic: 0.4
 
-cvs:
+cv:
   - midich: 2           # MIDI channel for CV input
     audioch: 5          # Pitch CV on channel 5, Gate CV on channel 6
     transpose: 0        # Transpose in semitones (-24 to +24)
@@ -151,7 +151,7 @@ Gate CV is 8V when a note is held, 0V otherwise. Glide only applies when playing
 ## Controls
 
 ```
-h/l, ←/→             = Switch between instances (poly16s, drums, and CVs)
+h/l, ←/→             = Switch between instances (poly16, drums, and CVs)
 
 j/k, ↑/↓             = Move cursor between parameters
 

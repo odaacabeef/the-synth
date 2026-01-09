@@ -56,7 +56,7 @@ fn render_multi_instance(frame: &mut Frame, app: &App) {
         let spacing = if idx == 0 {
             ""
         } else if Some(idx) == first_drum_idx {
-            "  :" // Divider between poly16s and drums (2 spaces + :)
+            "  :" // Divider between poly16 and drums (2 spaces + :)
         } else {
             " " // Regular spacing
         };

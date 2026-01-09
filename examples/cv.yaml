@@ -6,7 +6,7 @@ devices:
   midiin: mc-source-a
   audioout: ES-9
 
-cvs:
+cv:
 
   - midich: 1
     audioch: 9   # pitch cv on 9, gate on 10

@@ -12,13 +12,13 @@ pub struct SynthConfig {
     pub devices: DeviceConfig,
 
     #[serde(default)]
-    pub poly16s: Vec<SynthInstanceConfig>,
+    pub poly16: Vec<SynthInstanceConfig>,
 
     #[serde(default)]
     pub drums: Vec<DrumInstanceConfig>,
 
     #[serde(default)]
-    pub cvs: Vec<CVInstanceConfig>,
+    pub cv: Vec<CVInstanceConfig>,
 }
 
 impl SynthConfig {
@@ -37,14 +37,14 @@ impl SynthConfig {
 
     /// Validate the configuration
     pub fn validate(&self) -> Result<()> {
-        // Allow empty poly16s if we have drums or CVs
-        if self.poly16s.is_empty() && self.drums.is_empty() && self.cvs.is_empty() {
+        // Allow empty poly16 if we have drums or CVs
+        if self.poly16.is_empty() && self.drums.is_empty() && self.cv.is_empty() {
             return Err(anyhow!(
                 "Configuration must have at least one poly16, drum, or CV instance"
             ));
         }
 
-        for (idx, synth) in self.poly16s.iter().enumerate() {
+        for (idx, synth) in self.poly16.iter().enumerate() {
             synth
                 .validate()
                 .with_context(|| format!("Invalid configuration for synth instance {}", idx))?;
@@ -55,7 +55,7 @@ impl SynthConfig {
                 .with_context(|| format!("Invalid configuration for drum instance {}", idx))?;
         }
 
-        for (idx, cv) in self.cvs.iter().enumerate() {
+        for (idx, cv) in self.cv.iter().enumerate() {
             cv.validate()
                 .with_context(|| format!("Invalid configuration for CV instance {}", idx))?;
         }
@@ -513,7 +513,7 @@ devices:
   midiin: "test-midi"
   audioout: "test-audio"
 
-poly16s:
+poly16:
   - name: "Bass"
     midich: 1
     audioch: 1
@@ -534,9 +534,9 @@ poly16s:
 
         let config: SynthConfig = serde_yaml::from_str(yaml).unwrap();
         assert!(config.validate().is_ok());
-        assert_eq!(config.poly16s.len(), 2);
-        assert_eq!(config.poly16s[0].name, "Bass");
-        assert_eq!(config.poly16s[1].name, "Lead");
+        assert_eq!(config.poly16.len(), 2);
+        assert_eq!(config.poly16[0].name, "Bass");
+        assert_eq!(config.poly16[1].name, "Lead");
     }
 
     #[test]
@@ -546,7 +546,7 @@ devices:
   midiin: "test-midi"
   audioout: "test-audio"
 
-poly16s:
+poly16:
   - midich: omni
     audioch: 1
     wave: sine
@@ -554,7 +554,7 @@ poly16s:
 
         let config: SynthConfig = serde_yaml::from_str(yaml).unwrap();
         assert!(config.validate().is_ok());
-        assert_eq!(config.poly16s[0].midi_channel_filter(), 255);
+        assert_eq!(config.poly16[0].midi_channel_filter(), 255);
     }
 
     #[test]
@@ -564,7 +564,7 @@ devices:
   midiin: "test-midi"
   audioout: "test-audio"
 
-poly16s:
+poly16:
   - midich: 17
     audioch: 0
 "#;
@@ -580,7 +580,7 @@ devices:
   midiin: "test-midi"
   audioout: "test-audio"
 
-poly16s:
+poly16:
   - midich: 1
     audioch: 0
     attack: -1.0
@@ -597,17 +597,17 @@ devices:
   midiin: "test-midi"
   audioout: "test-audio"
 
-poly16s:
+poly16:
   - midich: 1
     audioch: 1
 "#;
 
         let config: SynthConfig = serde_yaml::from_str(yaml).unwrap();
         assert!(config.validate().is_ok());
-        assert_eq!(config.poly16s[0].name, "Untitled");
-        assert_eq!(config.poly16s[0].attack, 0.01);
-        assert_eq!(config.poly16s[0].decay, 0.1);
-        assert_eq!(config.poly16s[0].sustain, 0.7);
-        assert_eq!(config.poly16s[0].release, 0.1);
+        assert_eq!(config.poly16[0].name, "Untitled");
+        assert_eq!(config.poly16[0].attack, 0.01);
+        assert_eq!(config.poly16[0].decay, 0.1);
+        assert_eq!(config.poly16[0].sustain, 0.7);
+        assert_eq!(config.poly16[0].release, 0.1);
     }
 }

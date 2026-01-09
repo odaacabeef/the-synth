@@ -162,7 +162,7 @@ fn run_config_mode(
     let mut instances = Vec::new();
     let mut all_parameters = Vec::new();
 
-    for synth_config in &config.poly16s {
+    for synth_config in &config.poly16 {
         let params = Arc::new(SynthParameters::default());
 
         // Set ADSR parameters
@@ -243,7 +243,7 @@ fn run_config_mode(
     // Create engine specs for each CV instance
     let mut cv_parameters = Vec::new();
 
-    for cv_config in &config.cvs {
+    for cv_config in &config.cv {
         // Create CV parameters from config
         let params = Arc::new(instruments::cv::CVParameters::new_with_config(
             cv_config.transpose,
@@ -276,7 +276,7 @@ fn run_config_mode(
     let num_channels = audio_config.channels() as usize;
 
     // Validate CV instances have enough channels (each CV uses 2 consecutive channels)
-    for cv_config in &config.cvs {
+    for cv_config in &config.cv {
         let gate_ch = cv_config.gate_channel_index();
         if gate_ch >= num_channels {
             return Err(anyhow::anyhow!(
@@ -314,11 +314,11 @@ fn run_config_mode(
     // Create multi-instance app
     let mut app = App::new_multi_instance(
         all_parameters,
-        config.poly16s.clone(),
+        config.poly16.clone(),
         drum_parameters,
         config.drums.clone(),
         cv_parameters,
-        config.cvs.clone(),
+        config.cv.clone(),
     );
 
     // Run UI loop
