@@ -1,8 +1,9 @@
 # the-synth
 
-A multi-instance MIDI synthesizer and drum machine for the terminal. Run multiple
-16-voice polyphonic synthesizers and physically-modeled drum engines simultaneously,
-each with independent parameter control and configurable MIDI/audio channel routing.
+A multi-instance MIDI synthesizer, drum machine, and CV generator for the terminal.
+Run multiple 16-voice polyphonic synthesizers, physically-modeled drum engines, and
+control voltage outputs simultaneously, each with independent parameter control and
+configurable MIDI/audio channel routing.
 
 ## Usage
 
@@ -73,14 +74,29 @@ drums:
     brightness: 7000.0
     hdecay: 0.05
     metallic: 0.4
+
+cvs:
+  - midich: 2           # MIDI channel for CV input
+    audioch: 5          # Pitch CV on channel 5, Gate CV on channel 6
+    transpose: 0        # Transpose in semitones (-24 to +24)
+    glide: 0.1          # Glide time in seconds (0.0 to 2.0)
+
+  - midich: 3
+    audioch: 7          # Pitch CV on channel 7, Gate CV on channel 8
+    transpose: 12       # One octave up
+    glide: 0.5          # Slower glide
 ```
 
 Each poly16 instance has 16-voice polyphony and independent ADSR/waveform settings.
 Each drum instance triggers on a specific MIDI note with physically-modeled synthesis.
+Each CV instance outputs 1V/octave pitch CV and gate CV on consecutive audio channels
+for interfacing with modular synthesizers via DC-coupled audio interfaces (e.g., Expert Sleepers ES-9).
 
 ## Interface
 
-![example-config.yaml](docs/screenshot.png)
+<img src="docs/screenshot-basic.png" alt="examples/basic.yaml" width="100%">
+
+<img src="docs/screenshot-cv.png" alt="examples/cv.yaml" width="40%">
 
 ### Poly16 Parameters
 
@@ -118,10 +134,24 @@ Each drum type has unique physically-modeled parameters:
 - Decay (0.01-0.3s): Amplitude decay time
 - Metallic (0.0-1.0): Resonance amount for bell-like ringing
 
+### CV Parameters
+
+CV (Control Voltage) instances output 1V/octave pitch CV and gate CV on consecutive
+audio channels for interfacing with modular synthesizers. Requires a DC-coupled audio
+interface (e.g., Expert Sleepers ES-9).
+
+**Transpose** (-24 to +24 semitones): Pitch offset applied to incoming MIDI notes
+
+**Glide** (0.0-2.0s): Linear portamento time between notes (legato only)
+
+The display shows the current MIDI note name and its corresponding voltage (C4 = 0V).
+Gate CV is 8V when a note is held, 0V otherwise. Glide only applies when playing legato
+(holding one note while pressing another).
+
 ## Controls
 
 ```
-h/l, ←/→             = Switch between instances (poly16s and drums)
+h/l, ←/→             = Switch between instances (poly16s, drums, and CVs)
 
 j/k, ↑/↓             = Move cursor between parameters
 
