@@ -34,6 +34,7 @@ pub enum MultiInstance {
         config: DrumInstanceConfig,
         parameters: DrumParameters,
         voice_state: Option<u8>,
+        last_trigger: Option<std::time::Instant>,
     },
     CV {
         config: CVInstanceConfig,
@@ -103,6 +104,7 @@ impl App {
                 config,
                 parameters: params,
                 voice_state: None,
+                last_trigger: None,
             });
         }
 
@@ -313,9 +315,14 @@ impl App {
                     } => {
                         *vs = voice_states;
                     }
-                    MultiInstance::Drum { voice_state: vs, .. } => {
+                    MultiInstance::Drum { voice_state: vs, last_trigger, .. } => {
                         // For drums, take the first active voice (if any)
-                        *vs = voice_states.iter().find(|v| v.is_some()).copied().flatten();
+                        let new_state = voice_states.iter().find(|v| v.is_some()).copied().flatten();
+                        // Detect trigger: drum went from inactive to active
+                        if vs.is_none() && new_state.is_some() {
+                            *last_trigger = Some(std::time::Instant::now());
+                        }
+                        *vs = new_state;
                     }
                     MultiInstance::CV { voice_state: vs, .. } => {
                         // For CV, take the first active voice (monophonic)

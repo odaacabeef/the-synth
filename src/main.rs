@@ -351,7 +351,6 @@ where
 
     // Pre-allocate buffer for processing
     let mut temp_buffer = vec![0.0f32; 512 * num_channels];
-    let mut frame_counter = 0u64;
 
     // Build output stream
     let stream = device.build_output_stream(
@@ -372,13 +371,9 @@ where
                 data[i] = T::from_sample(*sample);
             }
 
-            // Periodically send voice states to UI
-            // Update every ~5ms (220 frames @ 44100 Hz) for responsive drum hit display
-            frame_counter += frames as u64;
-            if frame_counter > 220 {
-                let _ = voice_tx.try_send(multi_engine.all_voice_states());
-                frame_counter = 0;
-            }
+            // Send voice states to UI on every callback for immediate drum trigger feedback
+            // This ensures hi-hat hits with fast patterns and short decay are captured
+            let _ = voice_tx.try_send(multi_engine.all_voice_states());
         },
         |err| eprintln!("Audio stream error: {}", err),
         None,
@@ -413,7 +408,7 @@ fn run_multi_ui_loop(
         }
 
         // Small sleep to reduce CPU usage
-        std::thread::sleep(Duration::from_millis(16)); // ~60 FPS
+        std::thread::sleep(Duration::from_millis(11)); // ~90 FPS
     }
 
     Ok(())

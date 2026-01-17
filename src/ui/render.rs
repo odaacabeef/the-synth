@@ -105,8 +105,9 @@ fn build_instance_lines(
         MultiInstance::Drum {
             config,
             voice_state,
+            last_trigger,
             ..
-        } => build_drum_lines(config, *voice_state, is_selected, selected_drum_param),
+        } => build_drum_lines(config, *voice_state, *last_trigger, is_selected, selected_drum_param),
         MultiInstance::CV {
             config,
             voice_state,
@@ -213,6 +214,7 @@ fn build_synth_lines(
 fn build_drum_lines(
     config: &crate::config::DrumInstanceConfig,
     voice_state: Option<u8>,
+    last_trigger: Option<std::time::Instant>,
     is_selected: bool,
     selected_drum_param: DrumParameter,
 ) -> Vec<String> {
@@ -258,7 +260,11 @@ fn build_drum_lines(
     lines.push(String::new()); // Blank line (line 9, where synth Wave is)
 
     // Voice state indicator on line 10 (matching synth voice states)
-    let state_indicator = if voice_state.is_some() { "(X)" } else { "---" };
+    // Show (X) if voice is active OR if triggered within last 80ms (for snappy visual feedback)
+    let recently_triggered = last_trigger
+        .map(|t| t.elapsed().as_millis() < 80)
+        .unwrap_or(false);
+    let state_indicator = if voice_state.is_some() || recently_triggered { "(X)" } else { "---" };
     lines.push(format!("  {}", state_indicator));
 
     lines.push(String::new()); // Blank line (line 11)
