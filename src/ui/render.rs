@@ -260,11 +260,11 @@ fn build_drum_lines(
     lines.push(String::new()); // Blank line (line 9, where synth Wave is)
 
     // Voice state indicator on line 10 (matching synth voice states)
-    // Show (X) if voice is active OR if triggered within last 80ms (for snappy visual feedback)
+    // Show +++ if voice is active OR if triggered within last 80ms (for snappy visual feedback)
     let recently_triggered = last_trigger
         .map(|t| t.elapsed().as_millis() < 80)
         .unwrap_or(false);
-    let state_indicator = if voice_state.is_some() || recently_triggered { "(X)" } else { "---" };
+    let state_indicator = if voice_state.is_some() || recently_triggered { "+++" } else { "---" };
     lines.push(format!("  {}", state_indicator));
 
     lines.push(String::new()); // Blank line (line 11)
