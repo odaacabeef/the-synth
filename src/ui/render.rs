@@ -234,23 +234,26 @@ fn build_drum_lines(
     // Parameters based on drum type
     match config.drum_type {
         DrumType::Kick => {
-            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickPitchStart, "PitchStart", format!("{}Hz", config.kick_pitch_start));
-            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickPitchEnd, "PitchEnd", format!("{}Hz", config.kick_pitch_end));
-            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickPitchDecay, "PitchDecay", format!("{:.3}s", config.kick_pitch_decay));
-            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickDecay, "Decay", format!("{:.3}s", config.kick_decay));
-            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickClick, "Click", format!("{:.2}", config.kick_click));
+            // Longest param name: "PitchStart" or "PitchDecay" = 10 chars, +1 for colon = 11
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickPitchStart, "PitchStart", format!("{}Hz", config.kick_pitch_start), 11);
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickPitchEnd, "PitchEnd", format!("{}Hz", config.kick_pitch_end), 11);
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickPitchDecay, "PitchDecay", format!("{:.3}s", config.kick_pitch_decay), 11);
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickDecay, "Decay", format!("{:.3}s", config.kick_decay), 11);
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::KickClick, "Click", format!("{:.2}", config.kick_click), 11);
         }
         DrumType::Snare => {
-            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::SnareToneFreq, "ToneFreq", format!("{}Hz", config.snare_tone_freq));
-            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::SnareToneMix, "ToneMix", format!("{:.2}", config.snare_tone_mix));
-            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::SnareDecay, "Decay", format!("{:.3}s", config.snare_decay));
-            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::SnareSnap, "Snap", format!("{:.2}", config.snare_snap));
+            // Longest param name: "ToneFreq" = 8 chars, +1 for colon = 9
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::SnareToneFreq, "ToneFreq", format!("{}Hz", config.snare_tone_freq), 9);
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::SnareToneMix, "ToneMix", format!("{:.2}", config.snare_tone_mix), 9);
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::SnareDecay, "Decay", format!("{:.3}s", config.snare_decay), 9);
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::SnareSnap, "Snap", format!("{:.2}", config.snare_snap), 9);
             lines.push(String::new()); // Blank line (snare has 4 params, need 5 lines)
         }
         DrumType::Hat => {
-            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::HatBrightness, "Brightness", format!("{}Hz", config.hat_brightness));
-            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::HatDecay, "Decay", format!("{:.3}s", config.hat_decay));
-            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::HatMetallic, "Metallic", format!("{:.2}", config.hat_metallic));
+            // Longest param name: "Brightness" = 10 chars, +1 for colon = 11
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::HatBrightness, "Brightness", format!("{}Hz", config.hat_brightness), 11);
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::HatDecay, "Decay", format!("{:.3}s", config.hat_decay), 11);
+            add_drum_param_line(&mut lines, is_selected, selected_drum_param, DrumParameter::HatMetallic, "Metallic", format!("{:.2}", config.hat_metallic), 11);
             lines.push(String::new()); // Blank line (hat has 3 params, need 5 lines)
             lines.push(String::new()); // Another blank
         }
@@ -293,13 +296,17 @@ fn add_drum_param_line(
     param: DrumParameter,
     name: &str,
     value: String,
+    width: usize,
 ) {
     let cursor = if is_selected && selected_drum_param == param {
         ">"
     } else {
         " "
     };
-    lines.push(format!("{} {}: {}", cursor, name, value));
+    // Left-align parameter name with colon, then pad to specified width
+    // Width should be longest_name_length + 1 (for colon) to give 1 space before values
+    let label = format!("{}:", name);
+    lines.push(format!("{} {:<width$} {}", cursor, label, value, width = width));
 }
 
 /// Build lines for a CV instance
