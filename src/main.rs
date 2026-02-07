@@ -31,8 +31,8 @@ use ui::{app::App, events, render};
 #[command(name = "the-synth")]
 #[command(about = "Multi-instance polyphonic synthesizer", long_about = None)]
 struct Args {
-    /// Configuration file (YAML)
-    #[arg(short = 'c', long = "config", required_unless_present = "list_devices")]
+    /// Configuration file (YAML, defaults to synth.yaml)
+    #[arg(short = 'c', long = "config")]
     config: Option<std::path::PathBuf>,
 
     /// List available devices and exit
@@ -137,8 +137,8 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Config is required when not listing (enforced by clap)
-    let config_path = args.config.expect("--config is required");
+    // Use synth.yaml as default if no config specified
+    let config_path = args.config.unwrap_or_else(|| "synth.yaml".into());
     run_config_mode(config_path, midi_devices, audio_devices)
 }
 

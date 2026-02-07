@@ -19,6 +19,9 @@ the-synth --list
 
 # Run with configuration file
 the-synth --config example-config.yaml
+
+# Run with default config path (expects synth.yaml in current directory)
+the-synth
 ```
 
 ## Configuration
