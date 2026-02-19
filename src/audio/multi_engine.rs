@@ -20,6 +20,7 @@ pub enum EngineSpec {
     CV {
         parameters: Arc<CVParameters>,
         midi_channel: u8,
+        voice_count: usize,
     },
 }
 
@@ -31,24 +32,12 @@ pub enum EngineType {
 }
 
 impl EngineType {
-    /// Process audio for this engine
+    /// Process audio for this engine (synth/drum only)
     fn process(&mut self, output: &mut [f32]) {
         match self {
             EngineType::Synth(e) => e.process(output),
             EngineType::Drum(e) => e.process(output),
-            EngineType::CV(e) => e.process(output),
-        }
-    }
-
-    /// Process dual-channel (for CV engines)
-    fn process_dual_channel(&mut self, pitch_output: &mut [f32], gate_output: &mut [f32]) {
-        match self {
-            EngineType::CV(e) => e.process_dual_channel(pitch_output, gate_output),
-            _ => {
-                // For non-CV engines, just fill pitch with single-channel and gate with silence
-                self.process(pitch_output);
-                gate_output.fill(0.0);
-            }
+            EngineType::CV(_) => panic!("CV engines must use process_cv"),
         }
     }
 
@@ -66,7 +55,8 @@ impl EngineType {
 pub struct SynthInstance {
     pub engine: EngineType,
     pub audio_channel: usize,
-    pub uses_dual_channel: bool, // CV engines use two consecutive channels
+    /// None for synth/drum (single channel), Some(n) for CV with n pitch voices
+    pub cv_voices: Option<usize>,
 }
 
 /// Multi-engine synthesizer
@@ -96,8 +86,7 @@ impl MultiEngineSynth {
             // Create a dedicated event channel for this instance
             let (event_tx, event_rx) = unbounded();
 
-            // Create the appropriate engine type and determine if it uses dual channels
-            let (engine, uses_dual_channel) = match spec {
+            let (engine, cv_voices) = match spec {
                 EngineSpec::Synth {
                     params,
                     midi_channel,
@@ -108,7 +97,7 @@ impl MultiEngineSynth {
                         event_rx,
                         midi_channel,
                     );
-                    (EngineType::Synth(synth_engine), false)
+                    (EngineType::Synth(synth_engine), None)
                 }
                 EngineSpec::Drum {
                     trigger_note,
@@ -122,26 +111,28 @@ impl MultiEngineSynth {
                         midi_channel,
                         event_rx,
                     );
-                    (EngineType::Drum(drum_engine), false)
+                    (EngineType::Drum(drum_engine), None)
                 }
                 EngineSpec::CV {
                     parameters,
                     midi_channel,
+                    voice_count,
                 } => {
                     let cv_engine = CVEngine::new(
                         sample_rate,
                         parameters,
                         event_rx,
                         midi_channel,
+                        voice_count,
                     );
-                    (EngineType::CV(cv_engine), true)
+                    (EngineType::CV(cv_engine), Some(voice_count))
                 }
             };
 
             synth_instances.push(SynthInstance {
                 engine,
                 audio_channel,
-                uses_dual_channel,
+                cv_voices,
             });
 
             instance_event_txs.push(event_tx);
@@ -177,47 +168,60 @@ impl MultiEngineSynth {
         // Broadcast all pending events to instance event channels
         while let Ok(event) = self.main_event_rx.try_recv() {
             for event_tx in &self.instance_event_txs {
-                // Non-blocking send; if channel is full, skip (shouldn't happen in practice)
                 let _ = event_tx.try_send(event);
             }
         }
 
-        // Temporary buffers for engine output
-        let mut pitch_buffer = vec![0.0f32; frames];
+        // Temporary buffers for engine output (grown as needed, reused across instances)
+        let mut mono_buffer = vec![0.0f32; frames];
         let mut gate_buffer = vec![0.0f32; frames];
+        // Pitch buffers for CV voices; grown lazily as we encounter CV instances
+        let mut cv_pitch_buffers: Vec<Vec<f32>> = Vec::new();
 
         // Process each instance
         for instance in &mut self.instances {
-            if instance.uses_dual_channel {
-                // CV dual-channel processing
-                pitch_buffer.fill(0.0);
-                gate_buffer.fill(0.0);
-                instance.engine.process_dual_channel(&mut pitch_buffer, &mut gate_buffer);
+            if let Some(voice_count) = instance.cv_voices {
+                // CV multi-channel processing:
+                // Gate -> audio_channel, pitch voices -> audio_channel+1, audio_channel+2, ...
 
-                // Mix pitch to channel N
-                let pitch_ch = instance.audio_channel;
-                if pitch_ch < num_channels {
-                    for frame_idx in 0..frames {
-                        output[frame_idx * num_channels + pitch_ch] += pitch_buffer[frame_idx];
-                    }
+                // Ensure we have enough pitch buffers
+                while cv_pitch_buffers.len() < voice_count {
+                    cv_pitch_buffers.push(vec![0.0f32; frames]);
                 }
 
-                // Mix gate to channel N+1
-                let gate_ch = instance.audio_channel + 1;
+                if let EngineType::CV(engine) = &mut instance.engine {
+                    engine.process_cv(
+                        &mut gate_buffer[..frames],
+                        &mut cv_pitch_buffers[..voice_count],
+                    );
+                }
+
+                // Route gate to audio_channel
+                let gate_ch = instance.audio_channel;
                 if gate_ch < num_channels {
                     for frame_idx in 0..frames {
                         output[frame_idx * num_channels + gate_ch] += gate_buffer[frame_idx];
                     }
                 }
+
+                // Route pitch voices to audio_channel+1, audio_channel+2, ...
+                for (v, pitch_buf) in cv_pitch_buffers[..voice_count].iter().enumerate() {
+                    let pitch_ch = instance.audio_channel + 1 + v;
+                    if pitch_ch < num_channels {
+                        for frame_idx in 0..frames {
+                            output[frame_idx * num_channels + pitch_ch] += pitch_buf[frame_idx];
+                        }
+                    }
+                }
             } else {
                 // Single-channel processing (synth/drum)
-                pitch_buffer.fill(0.0);
-                instance.engine.process(&mut pitch_buffer);
+                mono_buffer.fill(0.0);
+                instance.engine.process(&mut mono_buffer);
 
                 let channel_idx = instance.audio_channel;
                 if channel_idx < num_channels {
                     for frame_idx in 0..frames {
-                        output[frame_idx * num_channels + channel_idx] += pitch_buffer[frame_idx];
+                        output[frame_idx * num_channels + channel_idx] += mono_buffer[frame_idx];
                     }
                 }
             }

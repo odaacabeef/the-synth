@@ -80,19 +80,25 @@ drums:
 
 cv:
   - midich: 2           # MIDI channel for CV input
-    audioch: 5          # Pitch CV on channel 5, Gate CV on channel 6
+    audioch: 5          # Gate CV on channel 5, Pitch CV on channel 6
+    voices: 1           # Number of pitch voices (0 = gate only)
     transpose: 0        # Transpose in semitones (-24 to +24)
     glide: 0.1          # Glide time in seconds (0.0 to 2.0)
 
   - midich: 3
-    audioch: 7          # Pitch CV on channel 7, Gate CV on channel 8
+    audioch: 7          # Gate on 7, pitches on 8, 9, 10
+    voices: 3           # Polyphonic: 3 pitch CV outputs
     transpose: 12       # One octave up
     glide: 0.5          # Slower glide
+
+  - midich: 4
+    audioch: 11         # Gate only on channel 11
+    voices: 0           # No pitch output
 ```
 
 Each poly16 instance has 16-voice polyphony and independent ADSR/waveform settings.
 Each drum instance triggers on a specific MIDI note with physically-modeled synthesis.
-Each CV instance outputs 1V/octave pitch CV and gate CV on consecutive audio channels
+Each CV instance outputs gate CV and up to N pitch CVs on consecutive audio channels
 for interfacing with modular synthesizers via DC-coupled audio interfaces (e.g., Expert Sleepers ES-9).
 
 ## Interface
@@ -139,17 +145,23 @@ Each drum type has unique physically-modeled parameters:
 
 ### CV Parameters
 
-CV (Control Voltage) instances output 1V/octave pitch CV and gate CV on consecutive
+CV (Control Voltage) instances output gate CV and 1V/octave pitch CVs on consecutive
 audio channels for interfacing with modular synthesizers. Requires a DC-coupled audio
 interface (e.g., Expert Sleepers ES-9).
 
+**Channel layout**: Gate CV is always on `audioch`. Pitch voice 1 is on `audioch+1`,
+voice 2 on `audioch+2`, and so on. With `voices: 0` only gate is output.
+
+**Voices** (0+): Number of polyphonic pitch CV outputs. Voice allocation uses
+oldest-voice stealing when all voices are occupied.
+
 **Transpose** (-24 to +24 semitones): Pitch offset applied to incoming MIDI notes
 
-**Glide** (0.0-2.0s): Linear portamento time between notes (legato only)
+**Glide** (0.0-2.0s): Linear portamento time between notes (legato only, per voice)
 
 The display shows the current MIDI note name and its corresponding voltage (C4 = 0V).
-Gate CV is 8V when a note is held, 0V otherwise. Glide only applies when playing legato
-(holding one note while pressing another).
+Gate CV is 8V when any note is held, 0V otherwise. Glide only applies when playing
+legato within a single voice.
 
 ## Controls
 

@@ -336,7 +336,10 @@ impl DrumInstanceConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CVInstanceConfig {
     pub midich: MidiChannelSpec,
-    pub audioch: usize, // Pitch CV output (Gate will be audioch + 1)
+    pub audioch: usize, // Gate CV output; pitch voices occupy audioch+1, audioch+2, ...
+
+    #[serde(default = "default_cv_voices")]
+    pub voices: usize, // Number of pitch CV voices (0 = gate only)
 
     #[serde(default = "default_cv_transpose")]
     pub transpose: i8, // Transpose in semitones (-24 to +24)
@@ -378,14 +381,9 @@ impl CVInstanceConfig {
         Ok(())
     }
 
-    /// Get the 0-indexed audio channel for internal use (pitch CV)
+    /// Get the 0-indexed audio channel for internal use (gate CV; pitch voices follow from audioch+1)
     pub fn audio_channel_index(&self) -> usize {
         self.audioch.saturating_sub(1)
-    }
-
-    /// Get the 0-indexed gate channel for internal use
-    pub fn gate_channel_index(&self) -> usize {
-        self.audioch // Gate is next channel (audioch is 1-indexed, so audioch as 0-indexed is audioch+1 in 1-indexed)
     }
 
     /// Get the MIDI channel filter value (0-15 for specific channel, 255 for omni)
@@ -494,6 +492,10 @@ fn default_hat_metallic() -> f32 {
 }
 
 // CV defaults
+fn default_cv_voices() -> usize {
+    1
+}
+
 fn default_cv_transpose() -> i8 {
     0
 }

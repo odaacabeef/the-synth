@@ -19,7 +19,7 @@ pub struct CVVoice {
     glide_samples_left: f32, // Samples remaining in glide
 
     // Gate state
-    gate_high: bool,
+    pub(super) gate_high: bool,
 }
 
 impl CVVoice {
@@ -149,19 +149,6 @@ impl CVVoice {
         self.current_pitch
     }
 
-    /// Generate next gate CV sample
-    pub fn next_gate_sample(&self) -> f32 {
-        if self.gate_high {
-            0.8 // 8V scaled to -10V to +10V range (0.8 = 8V)
-        } else {
-            0.0
-        }
-    }
-
-    /// Get current note (if any)
-    pub fn current_note(&self) -> Option<u8> {
-        self.note_stack.last().copied()
-    }
 }
 
 #[cfg(test)]
@@ -183,22 +170,24 @@ mod tests {
     #[test]
     fn test_note_priority() {
         let mut voice = CVVoice::new(44100.0);
+        // No glide so pitches jump immediately
 
-        // First note
-        voice.note_on(60); // C4
-        assert_eq!(voice.current_note(), Some(60));
+        // First note: C4 = 0V
+        voice.note_on(60);
+        assert_eq!(voice.next_pitch_sample(), 0.0);
 
-        // Second note (should switch)
-        voice.note_on(64); // E4
-        assert_eq!(voice.current_note(), Some(64));
+        // Second note: E4 = (64-60)/120 ≈ 0.0333V
+        voice.note_on(64);
+        let pitch_e4 = CVVoice::note_to_voltage(64, 0);
+        assert!((voice.next_pitch_sample() - pitch_e4).abs() < 0.001);
 
-        // Release second note (should return to first)
+        // Release E4: should return to C4
         voice.note_off(64);
-        assert_eq!(voice.current_note(), Some(60));
+        assert!((voice.next_pitch_sample() - 0.0).abs() < 0.001);
 
-        // Release first note (gate off)
+        // Release C4: gate off, pitch stays at last position
         voice.note_off(60);
-        assert_eq!(voice.current_note(), None);
+        assert!(!voice.gate_high);
     }
 
     #[test]
@@ -221,16 +210,4 @@ mod tests {
         assert!((voice.current_pitch - 0.1).abs() < 0.0001);
     }
 
-    #[test]
-    fn test_gate() {
-        let mut voice = CVVoice::new(44100.0);
-
-        assert_eq!(voice.next_gate_sample(), 0.0); // Gate low
-
-        voice.note_on(60);
-        assert_eq!(voice.next_gate_sample(), 0.8); // Gate high (8V)
-
-        voice.note_off(60);
-        assert_eq!(voice.next_gate_sample(), 0.0); // Gate low
-    }
 }

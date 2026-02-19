@@ -254,6 +254,7 @@ fn run_config_mode(
             EngineSpec::CV {
                 parameters: params.clone(),
                 midi_channel: cv_config.midi_channel_filter(),
+                voice_count: cv_config.voices,
             },
             cv_config.audio_channel_index(),
         ));
@@ -275,13 +276,17 @@ fn run_config_mode(
     let audio_config = device.default_output_config()?;
     let num_channels = audio_config.channels() as usize;
 
-    // Validate CV instances have enough channels (each CV uses 2 consecutive channels)
-    for cv_config in &config.cv {
-        let gate_ch = cv_config.gate_channel_index();
-        if gate_ch >= num_channels {
+    // Validate CV instances have enough channels
+    // Gate is on audioch (1-indexed), pitch voices on audioch+1..audioch+voices
+    for (idx, cv_config) in config.cv.iter().enumerate() {
+        let gate_ch = cv_config.audio_channel_index(); // 0-indexed gate channel
+        // Last required channel: gate + all pitch voices
+        let last_ch = gate_ch + cv_config.voices;
+        if last_ch >= num_channels {
             return Err(anyhow::anyhow!(
-                "CV instance requires gate channel {} but device only has {} channels",
-                gate_ch + 1, // Display as 1-indexed
+                "CV instance {} requires up to channel {} but device only has {} channels",
+                idx,
+                last_ch + 1, // Display as 1-indexed
                 num_channels
             ));
         }
