@@ -325,12 +325,12 @@ fn build_cv_lines(
         format!("{}", config.midi_channel_filter() + 1)
     };
 
-    // Title: m<midi>:a<gate>[+<pitch1>[+<pitch2>...]]
-    let mut audio_str = format!("a{}", config.audioch);
-    for v in 0..config.voices {
-        audio_str.push_str(&format!("+{}", config.audioch + 1 + v));
-    }
-    lines.push(format!("  m{}:{}", midi_ch_str, audio_str));
+    let title = match config.voices {
+        0 => format!("  m{}", midi_ch_str),
+        1 => format!("  m{}:a{}", midi_ch_str, config.audioch),
+        n => format!("  m{}:a{}-{}", midi_ch_str, config.audioch, config.audioch + n),
+    };
+    lines.push(title);
     lines.push(String::new());
 
     // Transpose parameter
