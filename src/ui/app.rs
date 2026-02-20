@@ -39,7 +39,7 @@ pub enum MultiInstance {
     CV {
         config: CVInstanceConfig,
         parameters: Arc<CVParameters>,
-        voice_state: Option<u8>,
+        voice_states: [Option<u8>; 16],
     },
 }
 
@@ -113,7 +113,7 @@ impl App {
             multi_instances.push(MultiInstance::CV {
                 config,
                 parameters: params,
-                voice_state: None,
+                voice_states: [None; 16],
             });
         }
 
@@ -324,9 +324,8 @@ impl App {
                         }
                         *vs = new_state;
                     }
-                    MultiInstance::CV { voice_state: vs, .. } => {
-                        // For CV, take the first active voice (monophonic)
-                        *vs = voice_states.iter().find(|v| v.is_some()).copied().flatten();
+                    MultiInstance::CV { voice_states: vs, .. } => {
+                        *vs = voice_states;
                     }
                 }
             }

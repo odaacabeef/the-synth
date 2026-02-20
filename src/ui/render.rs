@@ -110,9 +110,9 @@ fn build_instance_lines(
         } => build_drum_lines(config, *voice_state, *last_trigger, is_selected, selected_drum_param),
         MultiInstance::CV {
             config,
-            voice_state,
+            voice_states,
             ..
-        } => build_cv_lines(config, *voice_state, is_selected, selected_cv_param),
+        } => build_cv_lines(config, voice_states, is_selected, selected_cv_param),
     }
 }
 
@@ -312,7 +312,7 @@ fn add_drum_param_line(
 /// Build lines for a CV instance
 fn build_cv_lines(
     config: &crate::config::CVInstanceConfig,
-    voice_state: Option<u8>,
+    voice_states: &[Option<u8>; 16],
     is_selected: bool,
     selected_cv_param: CVParameter,
 ) -> Vec<String> {
@@ -349,27 +349,46 @@ fn build_cv_lines(
     };
     lines.push(format!("{} Glide: {:.3}s", cursor_glide, config.glide));
 
-    // Blank lines for spacing
-    for _ in 0..5 {
-        lines.push(String::new());
-    }
+    lines.push(String::new());
+    lines.push(String::new());
 
-    // Current note and voltage display
-    if let Some(note) = voice_state {
-        let note_name = midi_note_to_name(note);
-        let voltage = (note as f32 - 60.0) / 12.0;
-        lines.push(format!("  {} ({:+.3}V)", note_name, voltage));
+    // Voice display
+    if config.voices == 0 {
+        lines.push(String::from("  (gate only)"));
+    } else if config.voices == 1 {
+        let note = voice_states[0];
+        push_cv_voice_line(&mut lines, note, None);
     } else {
-        lines.push(format!("  --- (0.000V)"));
+        for v in 0..config.voices {
+            let note = voice_states.get(v).copied().flatten();
+            push_cv_voice_line(&mut lines, note, Some(v + 1));
+        }
     }
 
-    // Pad to match synth height
+    // Pad to consistent height
     while lines.len() < 16 {
         lines.push(String::new());
     }
 
     pad_lines(&mut lines);
     lines
+}
+
+fn push_cv_voice_line(lines: &mut Vec<String>, note: Option<u8>, index: Option<usize>) {
+    let prefix = match index {
+        Some(i) => format!("  {}:", i),
+        None => String::from(" "),
+    };
+    match note {
+        Some(n) => {
+            let note_name = midi_note_to_name(n);
+            let voltage = (n as f32 - 60.0) / 12.0;
+            lines.push(format!("{} {:<3}  {:+.3}V", prefix, note_name, voltage));
+        }
+        None => {
+            lines.push(format!("{} ---", prefix));
+        }
+    }
 }
 
 /// Pad all lines to same width for alignment
