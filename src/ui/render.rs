@@ -371,6 +371,17 @@ fn build_cv_lines(
     }
 
     pad_lines(&mut lines);
+
+    // Enforce minimum width: widest possible voice line is "  1: C#5  +1.667V"
+    let min_width = "  1: C#5  +1.667V".len();
+    let current_width = lines.first().map(|l| l.len()).unwrap_or(0);
+    if current_width < min_width {
+        let extra = min_width - current_width;
+        for line in lines.iter_mut() {
+            line.extend(std::iter::repeat(' ').take(extra));
+        }
+    }
+
     lines
 }
 
