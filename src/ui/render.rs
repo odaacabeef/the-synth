@@ -327,8 +327,7 @@ fn build_cv_lines(
     };
 
     let title = match config.voices {
-        0 => format!("  m{}", midi_ch_str),
-        1 => format!("  m{}:a{}", midi_ch_str, config.audioch),
+        0 => format!("  m{}:a{}", midi_ch_str, config.audioch),
         n => format!("  m{}:a{}-{}", midi_ch_str, config.audioch, config.audioch + n),
     };
     lines.push(title);
