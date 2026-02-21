@@ -92,14 +92,22 @@ impl CVEngine {
                     .unwrap_or(0)
             });
 
-        // Clear stolen voice before assigning
-        if self.voice_notes[voice_idx].is_some() {
+        // Clear stolen voice before assigning, but preserve gate state so
+        // note_on can start a glide if the voice was already playing.
+        let was_playing = if self.voice_notes[voice_idx].is_some() {
+            let g = self.voices[voice_idx].gate_high;
             self.voices[voice_idx].all_notes_off();
-        }
+            g
+        } else {
+            false
+        };
 
         self.voice_notes[voice_idx] = Some(note);
         self.voice_ages[voice_idx] = self.age_counter;
         self.age_counter += 1;
+        if was_playing {
+            self.voices[voice_idx].gate_high = true;
+        }
         self.voices[voice_idx].note_on(note);
     }
 
