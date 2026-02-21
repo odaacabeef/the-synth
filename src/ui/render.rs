@@ -277,8 +277,7 @@ fn build_drum_lines(
     // Type and note on line 13 (compact format, lowercase)
     let drum_type_str = config.drum_type.name().to_lowercase();
     let note_num = config.parse_note().unwrap_or(0);
-    let note_name = midi_note_to_name(note_num);
-    lines.push(format!("  {}: {} ({})", drum_type_str, note_name, note_num));
+    lines.push(format!("  {}: {} ({})", drum_type_str, config.note, note_num));
 
     // Add blank lines to match synth height (16 lines total)
     while lines.len() < 16 {
