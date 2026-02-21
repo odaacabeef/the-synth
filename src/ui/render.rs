@@ -334,12 +334,7 @@ fn build_cv_lines(
     };
     lines.push(title);
 
-    // Note filter indicator (blank line when unset, keeps layout consistent)
-    if let Some(Ok(note_num)) = config.parse_note() {
-        lines.push(format!("  n:{}", midi_note_to_name(note_num)));
-    } else {
-        lines.push(String::new());
-    }
+    lines.push(String::new());
 
     // Transpose parameter
     let cursor_transpose = if is_selected && selected_cv_param == CVParameter::Transpose {
@@ -357,7 +352,10 @@ fn build_cv_lines(
     };
     lines.push(format!("{} Glide: {:.3}s", cursor_glide, config.glide));
 
-    lines.push(String::new());
+    // Note filter
+    let note_str = config.note.as_deref().unwrap_or("-");
+    lines.push(format!("  Note: {}", note_str));
+
     lines.push(String::new());
 
     // Voice display
