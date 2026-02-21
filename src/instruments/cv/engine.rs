@@ -6,10 +6,16 @@ use crate::types::events::SynthEvent;
 
 /// CV output engine - generates control voltages for modular synths
 pub struct CVEngine {
-    voice: CVVoice,
+    voices: Vec<CVVoice>,
+    voice_notes: Vec<Option<u8>>, // active note per pitch voice
+    voice_ages: Vec<u64>,         // assignment age for voice stealing
+    age_counter: u64,
+    gate_note_count: usize, // count of held notes (drives gate output)
+    voice_count: usize,
     parameters: Arc<CVParameters>,
     event_rx: Receiver<SynthEvent>,
-    midi_channel_filter: u8, // 0-15 for specific channel, 255 for omni
+    midi_channel_filter: u8,  // 0-15 for specific channel, 255 for omni
+    note_filter: Option<u8>,  // when set, only this MIDI note triggers output
 }
 
 impl CVEngine {
@@ -18,18 +24,30 @@ impl CVEngine {
         parameters: Arc<CVParameters>,
         event_rx: Receiver<SynthEvent>,
         midi_channel_filter: u8,
+        voice_count: usize,
+        note_filter: Option<u8>,
     ) -> Self {
-        let mut voice = CVVoice::new(sample_rate);
-
-        // Initialize glide from parameters
         let glide = parameters.glide.load(Ordering::Relaxed);
-        voice.set_glide_time(glide);
+
+        let voices: Vec<CVVoice> = (0..voice_count)
+            .map(|_| {
+                let mut v = CVVoice::new(sample_rate);
+                v.set_glide_time(glide);
+                v
+            })
+            .collect();
 
         Self {
-            voice,
+            voice_notes: vec![None; voice_count],
+            voice_ages: vec![0; voice_count],
+            age_counter: 0,
+            gate_note_count: 0,
+            voices,
+            voice_count,
             parameters,
             event_rx,
             midi_channel_filter,
+            note_filter,
         }
     }
 
@@ -45,16 +63,87 @@ impl CVEngine {
         }
     }
 
-    /// Get voice states for UI (CV uses only first slot)
+    fn handle_note_on(&mut self, note: u8) {
+        self.gate_note_count = self.gate_note_count.saturating_add(1);
+
+        if self.voice_count == 0 {
+            return;
+        }
+
+        // If note already assigned to a voice, retrigger it
+        if let Some(i) = self.voice_notes.iter().position(|&n| n == Some(note)) {
+            self.voices[i].note_on(note);
+            self.voice_ages[i] = self.age_counter;
+            self.age_counter += 1;
+            return;
+        }
+
+        // Find a free voice or steal the oldest
+        let voice_idx = self
+            .voice_notes
+            .iter()
+            .position(|n| n.is_none())
+            .unwrap_or_else(|| {
+                self.voice_ages
+                    .iter()
+                    .enumerate()
+                    .min_by_key(|&(_, &age)| age)
+                    .map(|(i, _)| i)
+                    .unwrap_or(0)
+            });
+
+        // Clear stolen voice before assigning
+        if self.voice_notes[voice_idx].is_some() {
+            self.voices[voice_idx].all_notes_off();
+        }
+
+        self.voice_notes[voice_idx] = Some(note);
+        self.voice_ages[voice_idx] = self.age_counter;
+        self.age_counter += 1;
+        self.voices[voice_idx].note_on(note);
+    }
+
+    fn handle_note_off(&mut self, note: u8) {
+        self.gate_note_count = self.gate_note_count.saturating_sub(1);
+
+        if self.voice_count == 0 {
+            return;
+        }
+
+        if let Some(i) = self.voice_notes.iter().position(|&n| n == Some(note)) {
+            self.voices[i].note_off(note);
+            self.voice_notes[i] = None;
+        }
+    }
+
+    fn handle_all_notes_off(&mut self) {
+        self.gate_note_count = 0;
+        for (voice, note) in self.voices.iter_mut().zip(self.voice_notes.iter_mut()) {
+            voice.all_notes_off();
+            *note = None;
+        }
+    }
+
+    /// Get voice states for UI - returns active note per voice slot.
+    /// For 0-voice instances, slot 0 is used as a gate indicator: Some(0) = gate high.
     pub fn voice_states(&self) -> [Option<u8>; 16] {
         let mut states = [None; 16];
-        states[0] = self.voice.current_note();
+        if self.voice_count == 0 {
+            states[0] = if self.gate_note_count > 0 { Some(0) } else { None };
+        } else {
+            for (i, &note) in self.voice_notes.iter().enumerate().take(16) {
+                states[i] = note;
+            }
+        }
         states
     }
 
-    /// Process audio callback - fills pitch and gate buffers
-    pub fn process_dual_channel(&mut self, pitch_output: &mut [f32], gate_output: &mut [f32]) {
-        assert_eq!(pitch_output.len(), gate_output.len());
+    /// Process audio callback - fills gate buffer and one pitch buffer per voice
+    ///
+    /// Gate is high (0.8) whenever any note is held, regardless of voice count.
+    /// `pitch_outputs` must have exactly `voice_count` entries.
+    pub fn process_cv(&mut self, gate_output: &mut [f32], pitch_outputs: &mut [Vec<f32>]) {
+        let frames = gate_output.len();
 
         // Process all pending MIDI events
         while let Ok(event) = self.event_rx.try_recv() {
@@ -62,64 +151,41 @@ impl CVEngine {
                 continue;
             }
 
+            // Apply note filter: when set, only the specified note triggers output
+            let filtered = match &event {
+                SynthEvent::NoteOn { note, .. } | SynthEvent::NoteOff { note, .. } => {
+                    self.note_filter.map_or(false, |f| f != *note)
+                }
+                SynthEvent::AllNotesOff { .. } => false,
+            };
+            if filtered {
+                continue;
+            }
+
             match event {
-                SynthEvent::NoteOn { note, .. } => {
-                    self.voice.note_on(note);
-                }
-                SynthEvent::NoteOff { note, .. } => {
-                    self.voice.note_off(note);
-                }
-                SynthEvent::AllNotesOff { .. } => {
-                    self.voice.all_notes_off();
-                }
+                SynthEvent::NoteOn { note, .. } => self.handle_note_on(note),
+                SynthEvent::NoteOff { note, .. } => self.handle_note_off(note),
+                SynthEvent::AllNotesOff { .. } => self.handle_all_notes_off(),
             }
         }
 
         // Update parameters from UI thread
         let glide = self.parameters.glide.load(Ordering::Relaxed);
-        self.voice.set_glide_time(glide);
-
         let transpose = self.parameters.transpose.load(Ordering::Relaxed);
-        self.voice.set_transpose(transpose);
-
-        // Generate CV samples
-        for i in 0..pitch_output.len() {
-            pitch_output[i] = self.voice.next_pitch_sample();
-            gate_output[i] = self.voice.next_gate_sample();
-        }
-    }
-
-    /// Process single-channel (legacy compatibility - just outputs pitch CV)
-    pub fn process(&mut self, output: &mut [f32]) {
-        // Process events
-        while let Ok(event) = self.event_rx.try_recv() {
-            if !self.should_process_event(&event) {
-                continue;
-            }
-
-            match event {
-                SynthEvent::NoteOn { note, .. } => {
-                    self.voice.note_on(note);
-                }
-                SynthEvent::NoteOff { note, .. } => {
-                    self.voice.note_off(note);
-                }
-                SynthEvent::AllNotesOff { .. } => {
-                    self.voice.all_notes_off();
-                }
-            }
+        for voice in &mut self.voices {
+            voice.set_glide_time(glide);
+            voice.set_transpose(transpose);
         }
 
-        // Update parameters
-        let glide = self.parameters.glide.load(Ordering::Relaxed);
-        self.voice.set_glide_time(glide);
+        // Fill gate buffer (constant for the whole block)
+        let gate_val = if self.gate_note_count > 0 { 0.8 } else { 0.0 };
+        gate_output.fill(gate_val);
 
-        let transpose = self.parameters.transpose.load(Ordering::Relaxed);
-        self.voice.set_transpose(transpose);
-
-        // Generate pitch CV only
-        for sample in output.iter_mut() {
-            *sample = self.voice.next_pitch_sample();
+        // Fill pitch buffers
+        for (voice, buf) in self.voices.iter_mut().zip(pitch_outputs.iter_mut()) {
+            for s in &mut buf[..frames] {
+                *s = voice.next_pitch_sample();
+            }
         }
     }
 }

@@ -39,7 +39,8 @@ pub enum MultiInstance {
     CV {
         config: CVInstanceConfig,
         parameters: Arc<CVParameters>,
-        voice_state: Option<u8>,
+        voice_states: [Option<u8>; 16],
+        last_trigger: Option<std::time::Instant>,
     },
 }
 
@@ -113,7 +114,8 @@ impl App {
             multi_instances.push(MultiInstance::CV {
                 config,
                 parameters: params,
-                voice_state: None,
+                voice_states: [None; 16],
+                last_trigger: None,
             });
         }
 
@@ -324,9 +326,12 @@ impl App {
                         }
                         *vs = new_state;
                     }
-                    MultiInstance::CV { voice_state: vs, .. } => {
-                        // For CV, take the first active voice (monophonic)
-                        *vs = voice_states.iter().find(|v| v.is_some()).copied().flatten();
+                    MultiInstance::CV { voice_states: vs, last_trigger, .. } => {
+                        // Detect gate trigger: slot 0 going from None to Some signals gate-on
+                        if vs[0].is_none() && voice_states[0].is_some() {
+                            *last_trigger = Some(std::time::Instant::now());
+                        }
+                        *vs = voice_states;
                     }
                 }
             }

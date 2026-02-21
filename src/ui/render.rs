@@ -110,9 +110,10 @@ fn build_instance_lines(
         } => build_drum_lines(config, *voice_state, *last_trigger, is_selected, selected_drum_param),
         MultiInstance::CV {
             config,
-            voice_state,
+            voice_states,
+            last_trigger,
             ..
-        } => build_cv_lines(config, *voice_state, is_selected, selected_cv_param),
+        } => build_cv_lines(config, voice_states, *last_trigger, is_selected, selected_cv_param),
     }
 }
 
@@ -312,7 +313,8 @@ fn add_drum_param_line(
 /// Build lines for a CV instance
 fn build_cv_lines(
     config: &crate::config::CVInstanceConfig,
-    voice_state: Option<u8>,
+    voice_states: &[Option<u8>; 16],
+    last_trigger: Option<std::time::Instant>,
     is_selected: bool,
     selected_cv_param: CVParameter,
 ) -> Vec<String> {
@@ -325,14 +327,19 @@ fn build_cv_lines(
         format!("{}", config.midi_channel_filter() + 1)
     };
 
-    // Title: m<midi>:a<pitch>+<gate>
-    lines.push(format!(
-        "  m{}:a{}+{}",
-        midi_ch_str,
-        config.audioch,
-        config.audioch + 1
-    ));
-    lines.push(String::new());
+    let title = match config.voices {
+        0 => format!("  m{}", midi_ch_str),
+        1 => format!("  m{}:a{}", midi_ch_str, config.audioch),
+        n => format!("  m{}:a{}-{}", midi_ch_str, config.audioch, config.audioch + n),
+    };
+    lines.push(title);
+
+    // Note filter indicator (blank line when unset, keeps layout consistent)
+    if let Some(Ok(note_num)) = config.parse_note() {
+        lines.push(format!("  n:{}", midi_note_to_name(note_num)));
+    } else {
+        lines.push(String::new());
+    }
 
     // Transpose parameter
     let cursor_transpose = if is_selected && selected_cv_param == CVParameter::Transpose {
@@ -350,27 +357,61 @@ fn build_cv_lines(
     };
     lines.push(format!("{} Glide: {:.3}s", cursor_glide, config.glide));
 
-    // Blank lines for spacing
-    for _ in 0..5 {
-        lines.push(String::new());
-    }
+    lines.push(String::new());
+    lines.push(String::new());
 
-    // Current note and voltage display
-    if let Some(note) = voice_state {
-        let note_name = midi_note_to_name(note);
-        let voltage = (note as f32 - 60.0) / 12.0;
-        lines.push(format!("  {} ({:+.3}V)", note_name, voltage));
+    // Voice display
+    if config.voices == 0 {
+        let recently_triggered = last_trigger
+            .map(|t| t.elapsed().as_millis() < 80)
+            .unwrap_or(false);
+        let indicator = if voice_states[0].is_some() || recently_triggered { "+++" } else { "---" };
+        lines.push(format!("  {}", indicator));
+    } else if config.voices == 1 {
+        let note = voice_states[0];
+        push_cv_voice_line(&mut lines, note, None);
     } else {
-        lines.push(format!("  --- (0.000V)"));
+        for v in 0..config.voices {
+            let note = voice_states.get(v).copied().flatten();
+            push_cv_voice_line(&mut lines, note, Some(v + 1));
+        }
     }
 
-    // Pad to match synth height
+    // Pad to consistent height
     while lines.len() < 16 {
         lines.push(String::new());
     }
 
     pad_lines(&mut lines);
+
+    // Enforce minimum width: widest possible voice line is "  1: C#5  +1.667V"
+    let min_width = "  1: C#5  +1.667V".len();
+    let current_width = lines.first().map(|l| l.len()).unwrap_or(0);
+    if current_width < min_width {
+        let extra = min_width - current_width;
+        for line in lines.iter_mut() {
+            line.extend(std::iter::repeat(' ').take(extra));
+        }
+    }
+
     lines
+}
+
+fn push_cv_voice_line(lines: &mut Vec<String>, note: Option<u8>, index: Option<usize>) {
+    let prefix = match index {
+        Some(i) => format!("  {}:", i),
+        None => String::from(" "),
+    };
+    match note {
+        Some(n) => {
+            let note_name = midi_note_to_name(n);
+            let voltage = (n as f32 - 60.0) / 12.0;
+            lines.push(format!("{} {:<3}  {:+.3}V", prefix, note_name, voltage));
+        }
+        None => {
+            lines.push(format!("{} ---", prefix));
+        }
+    }
 }
 
 /// Pad all lines to same width for alignment
