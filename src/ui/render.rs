@@ -331,7 +331,13 @@ fn build_cv_lines(
         n => format!("  m{}:a{}-{}", midi_ch_str, config.audioch, config.audioch + n),
     };
     lines.push(title);
-    lines.push(String::new());
+
+    // Note filter indicator (blank line when unset, keeps layout consistent)
+    if let Some(Ok(note_num)) = config.parse_note() {
+        lines.push(format!("  n:{}", midi_note_to_name(note_num)));
+    } else {
+        lines.push(String::new());
+    }
 
     // Transpose parameter
     let cursor_transpose = if is_selected && selected_cv_param == CVParameter::Transpose {

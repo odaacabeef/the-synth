@@ -14,7 +14,8 @@ pub struct CVEngine {
     voice_count: usize,
     parameters: Arc<CVParameters>,
     event_rx: Receiver<SynthEvent>,
-    midi_channel_filter: u8, // 0-15 for specific channel, 255 for omni
+    midi_channel_filter: u8,  // 0-15 for specific channel, 255 for omni
+    note_filter: Option<u8>,  // when set, only this MIDI note triggers output
 }
 
 impl CVEngine {
@@ -24,6 +25,7 @@ impl CVEngine {
         event_rx: Receiver<SynthEvent>,
         midi_channel_filter: u8,
         voice_count: usize,
+        note_filter: Option<u8>,
     ) -> Self {
         let glide = parameters.glide.load(Ordering::Relaxed);
 
@@ -45,6 +47,7 @@ impl CVEngine {
             parameters,
             event_rx,
             midi_channel_filter,
+            note_filter,
         }
     }
 
@@ -140,6 +143,17 @@ impl CVEngine {
         // Process all pending MIDI events
         while let Ok(event) = self.event_rx.try_recv() {
             if !self.should_process_event(&event) {
+                continue;
+            }
+
+            // Apply note filter: when set, only the specified note triggers output
+            let filtered = match &event {
+                SynthEvent::NoteOn { note, .. } | SynthEvent::NoteOff { note, .. } => {
+                    self.note_filter.map_or(false, |f| f != *note)
+                }
+                SynthEvent::AllNotesOff { .. } => false,
+            };
+            if filtered {
                 continue;
             }
 

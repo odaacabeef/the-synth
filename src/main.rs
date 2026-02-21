@@ -250,11 +250,14 @@ fn run_config_mode(
             cv_config.glide,
         ));
 
+        let note_filter = cv_config.parse_note().transpose()?;
+
         instances.push((
             EngineSpec::CV {
                 parameters: params.clone(),
                 midi_channel: cv_config.midi_channel_filter(),
                 voice_count: cv_config.voices,
+                note_filter,
             },
             cv_config.audio_channel_index(),
         ));

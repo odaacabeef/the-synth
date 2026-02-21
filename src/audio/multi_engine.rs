@@ -21,6 +21,7 @@ pub enum EngineSpec {
         parameters: Arc<CVParameters>,
         midi_channel: u8,
         voice_count: usize,
+        note_filter: Option<u8>,
     },
 }
 
@@ -117,6 +118,7 @@ impl MultiEngineSynth {
                     parameters,
                     midi_channel,
                     voice_count,
+                    note_filter,
                 } => {
                     let cv_engine = CVEngine::new(
                         sample_rate,
@@ -124,6 +126,7 @@ impl MultiEngineSynth {
                         event_rx,
                         midi_channel,
                         voice_count,
+                        note_filter,
                     );
                     (EngineType::CV(cv_engine), Some(voice_count))
                 }

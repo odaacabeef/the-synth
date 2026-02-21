@@ -285,51 +285,53 @@ impl DrumInstanceConfig {
     /// Parse note string to MIDI note number
     /// Examples: "c1" -> 24, "d1" -> 26, "gb1" -> 30
     pub fn parse_note(&self) -> Result<u8> {
-        let note_str = self.note.to_lowercase();
-
-        // Parse note name (c, c#, d, etc.)
-        let mut chars = note_str.chars();
-        let note_char = chars
-            .next()
-            .ok_or_else(|| anyhow!("Empty note string"))?;
-
-        let base_note = match note_char {
-            'c' => 0,
-            'd' => 2,
-            'e' => 4,
-            'f' => 5,
-            'g' => 7,
-            'a' => 9,
-            'b' => 11,
-            _ => return Err(anyhow!("Invalid note name: {}", note_char)),
-        };
-
-        // Check for sharp/flat
-        let mut offset = 0;
-        let mut octave_str = String::new();
-        for ch in chars {
-            match ch {
-                '#' | 's' => offset = 1,  // Sharp
-                'b' | 'f' => offset = -1, // Flat
-                '0'..='9' | '-' => octave_str.push(ch),
-                _ => return Err(anyhow!("Invalid character in note: {}", ch)),
-            }
-        }
-
-        // Parse octave
-        let octave: i32 = octave_str
-            .parse()
-            .map_err(|_| anyhow!("Invalid octave: {}", octave_str))?;
-
-        // Calculate MIDI note: C-1 = 0, C0 = 12, C1 = 24, etc.
-        let midi_note = (octave + 1) * 12 + base_note + offset;
-
-        if midi_note < 0 || midi_note > 127 {
-            return Err(anyhow!("Note out of range: {}", midi_note));
-        }
-
-        Ok(midi_note as u8)
+        parse_note_str(&self.note)
     }
+}
+
+/// Parse a note string to a MIDI note number.
+/// Examples: "c1" -> 24, "d1" -> 26, "gb1" -> 30
+pub fn parse_note_str(note: &str) -> Result<u8> {
+    let note_str = note.to_lowercase();
+
+    let mut chars = note_str.chars();
+    let note_char = chars
+        .next()
+        .ok_or_else(|| anyhow!("Empty note string"))?;
+
+    let base_note = match note_char {
+        'c' => 0,
+        'd' => 2,
+        'e' => 4,
+        'f' => 5,
+        'g' => 7,
+        'a' => 9,
+        'b' => 11,
+        _ => return Err(anyhow!("Invalid note name: {}", note_char)),
+    };
+
+    let mut offset = 0i32;
+    let mut octave_str = String::new();
+    for ch in chars {
+        match ch {
+            '#' | 's' => offset = 1,
+            'b' | 'f' => offset = -1,
+            '0'..='9' | '-' => octave_str.push(ch),
+            _ => return Err(anyhow!("Invalid character in note: {}", ch)),
+        }
+    }
+
+    let octave: i32 = octave_str
+        .parse()
+        .map_err(|_| anyhow!("Invalid octave: {}", octave_str))?;
+
+    let midi_note = (octave + 1) * 12 + base_note + offset;
+
+    if midi_note < 0 || midi_note > 127 {
+        return Err(anyhow!("Note out of range: {}", midi_note));
+    }
+
+    Ok(midi_note as u8)
 }
 
 /// CV instance configuration
@@ -340,6 +342,9 @@ pub struct CVInstanceConfig {
 
     #[serde(default = "default_cv_voices")]
     pub voices: usize, // Number of pitch CV voices (0 = gate only)
+
+    #[serde(default)]
+    pub note: Option<String>, // When set, only this note triggers CV output
 
     #[serde(default = "default_cv_transpose")]
     pub transpose: i8, // Transpose in semitones (-24 to +24)
@@ -378,7 +383,17 @@ impl CVInstanceConfig {
             return Err(anyhow!("Glide must be between 0.0 and 2.0 seconds"));
         }
 
+        // Validate note string if present
+        if let Some(ref note) = self.note {
+            parse_note_str(note).context("Invalid CV note filter")?;
+        }
+
         Ok(())
+    }
+
+    /// Parse the note filter string to a MIDI note number, if set
+    pub fn parse_note(&self) -> Option<Result<u8>> {
+        self.note.as_deref().map(parse_note_str)
     }
 
     /// Get the 0-indexed audio channel for internal use (gate CV; pitch voices follow from audioch+1)
