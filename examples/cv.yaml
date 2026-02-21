@@ -29,3 +29,4 @@ cv:
     voices: 1
     transpose: -12 # One octave down
     glide: 0       # No glide
+    # note: "c2"   # Optional: only respond to this MIDI note

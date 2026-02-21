@@ -96,10 +96,12 @@ cv:
     voices: 0           # No pitch output
 ```
 
-Each poly16 instance has 16-voice polyphony and independent ADSR/waveform settings.
-Each drum instance triggers on a specific MIDI note with physically-modeled synthesis.
-Each CV instance outputs gate CV and up to N pitch CVs on consecutive audio channels
-for interfacing with modular synthesizers via DC-coupled audio interfaces (e.g., Expert Sleepers ES-9).
+Each poly16 instance has 16-voice polyphony and independent ADSR/waveform
+settings. Each drum instance triggers on a specific MIDI note with
+physically-modeled synthesis. Each CV instance outputs gate CV and a
+configurable number of pitch CVs on consecutive audio channels for interfacing
+with modular synthesizers via DC-coupled audio interfaces (e.g., Expert Sleepers
+ES-9).
 
 ## Interface
 
@@ -154,6 +156,8 @@ voice 2 on `audioch+2`, and so on. With `voices: 0` only gate is output.
 
 **Voices** (0+): Number of polyphonic pitch CV outputs. Voice allocation uses
 oldest-voice stealing when all voices are occupied.
+
+**Note**: When set, only the specified MIDI note triggers CV output (e.g., `note: "c2"`). All other notes are ignored. Useful for routing a single drum pad or key to a dedicated CV output.
 
 **Transpose** (-24 to +24 semitones): Pitch offset applied to incoming MIDI notes
 
