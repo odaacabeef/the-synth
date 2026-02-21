@@ -111,8 +111,9 @@ fn build_instance_lines(
         MultiInstance::CV {
             config,
             voice_states,
+            last_trigger,
             ..
-        } => build_cv_lines(config, voice_states, is_selected, selected_cv_param),
+        } => build_cv_lines(config, voice_states, *last_trigger, is_selected, selected_cv_param),
     }
 }
 
@@ -313,6 +314,7 @@ fn add_drum_param_line(
 fn build_cv_lines(
     config: &crate::config::CVInstanceConfig,
     voice_states: &[Option<u8>; 16],
+    last_trigger: Option<std::time::Instant>,
     is_selected: bool,
     selected_cv_param: CVParameter,
 ) -> Vec<String> {
@@ -360,7 +362,11 @@ fn build_cv_lines(
 
     // Voice display
     if config.voices == 0 {
-        lines.push(String::from("  (gate only)"));
+        let recently_triggered = last_trigger
+            .map(|t| t.elapsed().as_millis() < 80)
+            .unwrap_or(false);
+        let indicator = if voice_states[0].is_some() || recently_triggered { "+++" } else { "---" };
+        lines.push(format!("  {}", indicator));
     } else if config.voices == 1 {
         let note = voice_states[0];
         push_cv_voice_line(&mut lines, note, None);

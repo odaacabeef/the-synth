@@ -124,11 +124,16 @@ impl CVEngine {
         }
     }
 
-    /// Get voice states for UI - returns active note per voice slot
+    /// Get voice states for UI - returns active note per voice slot.
+    /// For 0-voice instances, slot 0 is used as a gate indicator: Some(0) = gate high.
     pub fn voice_states(&self) -> [Option<u8>; 16] {
         let mut states = [None; 16];
-        for (i, &note) in self.voice_notes.iter().enumerate().take(16) {
-            states[i] = note;
+        if self.voice_count == 0 {
+            states[0] = if self.gate_note_count > 0 { Some(0) } else { None };
+        } else {
+            for (i, &note) in self.voice_notes.iter().enumerate().take(16) {
+                states[i] = note;
+            }
         }
         states
     }
