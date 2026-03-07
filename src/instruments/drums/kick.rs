@@ -134,8 +134,11 @@ impl KickDrum {
         let noise_sample = self.noise.next_sample();
         let click_transient = noise_sample * click_env * self.click_amount;
 
-        // Mix tone and click
-        let mixed = osc_sample + click_transient;
+        // Mix tone and click, normalized to prevent clipping.
+        // osc_sample is in [-1.0, 1.0] and click_transient is in [-click_amount, +click_amount],
+        // so their sum can reach ±(1.0 + click_amount). Dividing by (1.0 + click_amount) ensures
+        // the mix stays within [-1.0, 1.0] at any click_amount value.
+        let mixed = (osc_sample + click_transient) / (1.0 + self.click_amount);
 
         // Apply amplitude envelope to the mix
         let amp_env = self.amp_envelope.next_sample();

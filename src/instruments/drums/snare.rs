@@ -170,8 +170,11 @@ impl SnareDrum {
         // tone_mix = 0.0 -> all noise, tone_mix = 1.0 -> all tone
         let body = tone_out * self.tone_mix + noise_out * (1.0 - self.tone_mix);
 
-        // Add snap transient to the mix
-        let mixed = body + snap_transient;
+        // Add snap transient to the mix, normalized to prevent clipping.
+        // body is in [-1.0, 1.0] and snap_transient is in [-snap_amount, +snap_amount],
+        // so their sum can reach ±(1.0 + snap_amount). Dividing by (1.0 + snap_amount) ensures
+        // the mix stays within [-1.0, 1.0] at any snap_amount value.
+        let mixed = (body + snap_transient) / (1.0 + self.snap_amount);
 
         self.vca.process(mixed, 1.0)
     }
