@@ -22,7 +22,7 @@ pub struct Envelope {
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum EnvelopeState {
     Idle,
-    Attack { start_sample: u64 },
+    Attack { start_sample: u64, start_level: f32 },
     Decay { start_sample: u64 },
     Sustain,
     Release { start_sample: u64, release_level: f32 },
@@ -51,10 +51,11 @@ impl Envelope {
         self.release = release.max(0.001);
     }
 
-    /// Trigger note on - start attack phase
+    /// Trigger note on - start attack phase from current level to avoid clicks on retrigger
     pub fn note_on(&mut self) {
         self.state = EnvelopeState::Attack {
             start_sample: self.sample_count,
+            start_level: self.current_level,
         };
     }
 
@@ -78,7 +79,7 @@ impl Envelope {
                 self.current_level = 0.0;
             }
 
-            EnvelopeState::Attack { start_sample } => {
+            EnvelopeState::Attack { start_sample, start_level } => {
                 let elapsed_samples = self.sample_count - start_sample;
                 let attack_samples = (self.attack * self.sample_rate) as u64;
 
@@ -89,9 +90,11 @@ impl Envelope {
                         start_sample: self.sample_count,
                     };
                 } else {
-                    // Linear ramp from 0 to 1
+                    // Linear ramp from start_level to 1.0.
+                    // Starting from start_level (rather than always 0) prevents amplitude
+                    // discontinuities when an envelope is retriggered mid-decay.
                     let progress = elapsed_samples as f32 / attack_samples as f32;
-                    self.current_level = progress;
+                    self.current_level = start_level + (1.0 - start_level) * progress;
                 }
             }
 

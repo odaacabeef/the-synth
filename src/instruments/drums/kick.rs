@@ -102,7 +102,6 @@ impl KickDrum {
         // Update parameters before triggering if using parameter control
         self.update_from_parameters();
 
-        self.oscillator.reset();
         self.pitch_envelope.note_on();
         self.amp_envelope.note_on();
         self.click_envelope.note_on();
