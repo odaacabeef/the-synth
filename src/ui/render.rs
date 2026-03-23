@@ -114,6 +114,12 @@ fn build_instance_lines(
             last_trigger,
             ..
         } => build_cv_lines(config, voice_states, *last_trigger, is_selected, selected_cv_param),
+        MultiInstance::ES5 {
+            config,
+            voice_states,
+            last_trigger,
+            ..
+        } => build_es5_lines(config, voice_states, *last_trigger),
     }
 }
 
@@ -408,6 +414,52 @@ fn push_cv_voice_line(lines: &mut Vec<String>, note: Option<u8>, index: Option<u
             lines.push(format!("{} ---", prefix));
         }
     }
+}
+
+/// Build lines for an ES-5 gate encoder instance
+fn build_es5_lines(
+    config: &crate::config::ES5InstanceConfig,
+    voice_states: &[Option<u8>; 16],
+    last_trigger: Option<std::time::Instant>,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+
+    // MIDI channel string
+    let midi_ch_str = if config.midi_channel_filter() == 255 {
+        "omni".to_string()
+    } else {
+        format!("{}", config.midi_channel_filter() + 1)
+    };
+
+    // Title: m<midi>:a<audio>-<audio+1>
+    lines.push(format!("  m{}:a{}-{}", midi_ch_str, config.audioch, config.audioch + 1));
+    lines.push(String::new());
+
+    // Each output: index, note, gate state
+    for (i, output) in config.outputs.iter().enumerate() {
+        let recently_triggered = last_trigger
+            .map(|t| t.elapsed().as_millis() < 80)
+            .unwrap_or(false);
+        let active = voice_states[i].is_some() || (recently_triggered && voice_states[i].is_some());
+        let indicator = if active { "+++" } else { "---" };
+        lines.push(format!("  {}: {:>3} {}", i + 1, output.note, indicator));
+    }
+
+    // Pad remaining param lines to match other instruments
+    while lines.len() < 8 {
+        lines.push(String::new());
+    }
+
+    // Type label
+    lines.push(String::new());
+    lines.push("  es5".to_string());
+
+    while lines.len() < 16 {
+        lines.push(String::new());
+    }
+
+    pad_lines(&mut lines);
+    lines
 }
 
 /// Pad all lines to same width for alignment

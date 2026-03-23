@@ -1,6 +1,6 @@
 use std::sync::{atomic::Ordering, Arc};
 use crate::instruments::poly16::SynthParameters;
-use crate::config::{CVInstanceConfig, DrumInstanceConfig, SynthInstanceConfig};
+use crate::config::{CVInstanceConfig, DrumInstanceConfig, ES5InstanceConfig, SynthInstanceConfig};
 use crate::instruments::drums::{DrumParameters, DrumType};
 use crate::instruments::cv::CVParameters;
 
@@ -39,6 +39,11 @@ pub enum MultiInstance {
     CV {
         config: CVInstanceConfig,
         parameters: Arc<CVParameters>,
+        voice_states: [Option<u8>; 16],
+        last_trigger: Option<std::time::Instant>,
+    },
+    ES5 {
+        config: ES5InstanceConfig,
         voice_states: [Option<u8>; 16],
         last_trigger: Option<std::time::Instant>,
     },
@@ -87,6 +92,7 @@ impl App {
         drum_configs: Vec<DrumInstanceConfig>,
         cv_parameters: Vec<Arc<CVParameters>>,
         cv_configs: Vec<CVInstanceConfig>,
+        es5_configs: Vec<ES5InstanceConfig>,
     ) -> Self {
         let mut multi_instances = Vec::new();
 
@@ -114,6 +120,15 @@ impl App {
             multi_instances.push(MultiInstance::CV {
                 config,
                 parameters: params,
+                voice_states: [None; 16],
+                last_trigger: None,
+            });
+        }
+
+        // Add ES5 instances
+        for config in es5_configs {
+            multi_instances.push(MultiInstance::ES5 {
+                config,
                 voice_states: [None; 16],
                 last_trigger: None,
             });
@@ -245,6 +260,7 @@ impl App {
                     CVParameter::Transpose => 0,
                     CVParameter::Glide => 1,
                 },
+                MultiInstance::ES5 { .. } => 0,
             }
         } else {
             0
@@ -303,6 +319,9 @@ impl App {
                         _ => CVParameter::Glide, // 1 or higher
                     };
                 }
+                MultiInstance::ES5 { .. } => {
+                    // ES5 has no editable parameters
+                }
             }
         }
     }
@@ -330,6 +349,16 @@ impl App {
                         // Detect gate trigger: slot 0 going from None to Some signals gate-on
                         if vs[0].is_none() && voice_states[0].is_some() {
                             *last_trigger = Some(std::time::Instant::now());
+                        }
+                        *vs = voice_states;
+                    }
+                    MultiInstance::ES5 { voice_states: vs, last_trigger, .. } => {
+                        // Detect any gate going from off to on
+                        for i in 0..6 {
+                            if vs[i].is_none() && voice_states[i].is_some() {
+                                *last_trigger = Some(std::time::Instant::now());
+                                break;
+                            }
                         }
                         *vs = voice_states;
                     }
@@ -532,6 +561,7 @@ impl App {
                     }
                     self.sync_multi_instance_to_audio();
                 }
+                MultiInstance::ES5 { .. } => {}
             }
         }
     }
@@ -638,6 +668,7 @@ impl App {
                     }
                     self.sync_multi_instance_to_audio();
                 }
+                MultiInstance::ES5 { .. } => {}
             }
         }
     }
@@ -702,6 +733,7 @@ impl App {
                     parameters.transpose.store(config.transpose, Ordering::Relaxed);
                     parameters.glide.store(config.glide, Ordering::Relaxed);
                 }
+                MultiInstance::ES5 { .. } => {}
             }
         }
     }

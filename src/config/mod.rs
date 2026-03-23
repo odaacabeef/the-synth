@@ -19,6 +19,9 @@ pub struct SynthConfig {
 
     #[serde(default)]
     pub cv: Vec<CVInstanceConfig>,
+
+    #[serde(default)]
+    pub es5: Vec<ES5InstanceConfig>,
 }
 
 impl SynthConfig {
@@ -37,10 +40,10 @@ impl SynthConfig {
 
     /// Validate the configuration
     pub fn validate(&self) -> Result<()> {
-        // Allow empty poly16 if we have drums or CVs
-        if self.poly16.is_empty() && self.drums.is_empty() && self.cv.is_empty() {
+        // Allow empty poly16 if we have drums, CVs, or ES5s
+        if self.poly16.is_empty() && self.drums.is_empty() && self.cv.is_empty() && self.es5.is_empty() {
             return Err(anyhow!(
-                "Configuration must have at least one poly16, drum, or CV instance"
+                "Configuration must have at least one poly16, drum, CV, or ES5 instance"
             ));
         }
 
@@ -58,6 +61,11 @@ impl SynthConfig {
         for (idx, cv) in self.cv.iter().enumerate() {
             cv.validate()
                 .with_context(|| format!("Invalid configuration for CV instance {}", idx))?;
+        }
+
+        for (idx, es5) in self.es5.iter().enumerate() {
+            es5.validate()
+                .with_context(|| format!("Invalid configuration for ES5 instance {}", idx))?;
         }
 
         Ok(())
@@ -407,6 +415,70 @@ impl CVInstanceConfig {
             MidiChannelSpec::Channel(ch) => ch - 1, // Convert 1-16 to 0-15
             MidiChannelSpec::Omni(_) => 255,        // Omni mode
         }
+    }
+}
+
+/// ES-5 output configuration - maps a MIDI note to one of the 6 gate outputs
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ES5OutputConfig {
+    pub note: String, // Note name like "c1", "d1"
+}
+
+/// ES-5 gate encoder instance configuration
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ES5InstanceConfig {
+    pub midich: MidiChannelSpec,
+    pub audioch: usize, // Stereo pair: this channel and the next
+    pub outputs: Vec<ES5OutputConfig>, // 1-6 gate outputs
+}
+
+impl ES5InstanceConfig {
+    pub fn validate(&self) -> Result<()> {
+        match &self.midich {
+            MidiChannelSpec::Channel(ch) => {
+                if *ch < 1 || *ch > 16 {
+                    return Err(anyhow!("MIDI channel must be between 1 and 16"));
+                }
+            }
+            MidiChannelSpec::Omni(_) => {}
+        }
+
+        if self.audioch < 1 {
+            return Err(anyhow!("Audio channel must be >= 1 (channels are 1-indexed)"));
+        }
+
+        if self.outputs.is_empty() || self.outputs.len() > 6 {
+            return Err(anyhow!("ES5 must have between 1 and 6 outputs"));
+        }
+
+        for (i, output) in self.outputs.iter().enumerate() {
+            parse_note_str(&output.note)
+                .with_context(|| format!("Invalid note for ES5 output {}", i + 1))?;
+        }
+
+        Ok(())
+    }
+
+    pub fn audio_channel_index(&self) -> usize {
+        self.audioch.saturating_sub(1)
+    }
+
+    pub fn midi_channel_filter(&self) -> u8 {
+        match &self.midich {
+            MidiChannelSpec::Channel(ch) => ch - 1,
+            MidiChannelSpec::Omni(_) => 255,
+        }
+    }
+
+    pub fn parse_output_notes(&self) -> Result<Vec<u8>> {
+        self.outputs
+            .iter()
+            .enumerate()
+            .map(|(i, output)| {
+                parse_note_str(&output.note)
+                    .with_context(|| format!("Invalid note for ES5 output {}", i + 1))
+            })
+            .collect()
     }
 }
 

@@ -47,6 +47,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                     MultiInstance::CV { .. } => {
                         app.next_cv_parameter();
                     }
+                    MultiInstance::ES5 { .. } => {}
                 }
             }
         }
@@ -63,6 +64,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                     MultiInstance::CV { .. } => {
                         app.prev_cv_parameter();
                     }
+                    MultiInstance::ES5 { .. } => {}
                 }
             }
         }

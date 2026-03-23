@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::instruments::poly16::{SynthEngine, SynthParameters};
 use crate::instruments::drums::{DrumEngine, DrumParameters};
 use crate::instruments::cv::{CVEngine, CVParameters};
+use crate::instruments::es5::ES5Engine;
 use crate::types::events::SynthEvent;
 
 /// Specification for creating an engine instance
@@ -23,6 +24,10 @@ pub enum EngineSpec {
         voice_count: usize,
         note_filter: Option<u8>,
     },
+    ES5 {
+        trigger_notes: Vec<u8>,
+        midi_channel: u8,
+    },
 }
 
 /// Engine type - can be either a synth, drum, or CV
@@ -30,6 +35,7 @@ pub enum EngineType {
     Synth(SynthEngine),
     Drum(DrumEngine),
     CV(CVEngine),
+    ES5(ES5Engine),
 }
 
 impl EngineType {
@@ -39,6 +45,7 @@ impl EngineType {
             EngineType::Synth(e) => e.process(output),
             EngineType::Drum(e) => e.process(output),
             EngineType::CV(_) => panic!("CV engines must use process_cv"),
+            EngineType::ES5(_) => panic!("ES5 engines must use process_dual_channel"),
         }
     }
 
@@ -48,6 +55,7 @@ impl EngineType {
             EngineType::Synth(e) => e.voice_states(),
             EngineType::Drum(e) => e.voice_states(),
             EngineType::CV(e) => e.voice_states(),
+            EngineType::ES5(e) => e.voice_states(),
         }
     }
 }
@@ -58,6 +66,8 @@ pub struct SynthInstance {
     pub audio_channel: usize,
     /// None for synth/drum (single channel), Some(n) for CV with n pitch voices
     pub cv_voices: Option<usize>,
+    /// true for ES5 instances (dual-channel stereo pair)
+    pub es5: bool,
 }
 
 /// Multi-engine synthesizer
@@ -87,7 +97,7 @@ impl MultiEngineSynth {
             // Create a dedicated event channel for this instance
             let (event_tx, event_rx) = unbounded();
 
-            let (engine, cv_voices) = match spec {
+            let (engine, cv_voices, is_es5) = match spec {
                 EngineSpec::Synth {
                     params,
                     midi_channel,
@@ -98,7 +108,7 @@ impl MultiEngineSynth {
                         event_rx,
                         midi_channel,
                     );
-                    (EngineType::Synth(synth_engine), None)
+                    (EngineType::Synth(synth_engine), None, false)
                 }
                 EngineSpec::Drum {
                     trigger_note,
@@ -112,7 +122,7 @@ impl MultiEngineSynth {
                         midi_channel,
                         event_rx,
                     );
-                    (EngineType::Drum(drum_engine), None)
+                    (EngineType::Drum(drum_engine), None, false)
                 }
                 EngineSpec::CV {
                     parameters,
@@ -128,7 +138,18 @@ impl MultiEngineSynth {
                         voice_count,
                         note_filter,
                     );
-                    (EngineType::CV(cv_engine), Some(voice_count))
+                    (EngineType::CV(cv_engine), Some(voice_count), false)
+                }
+                EngineSpec::ES5 {
+                    trigger_notes,
+                    midi_channel,
+                } => {
+                    let es5_engine = ES5Engine::new(
+                        &trigger_notes,
+                        midi_channel,
+                        event_rx,
+                    );
+                    (EngineType::ES5(es5_engine), None, true)
                 }
             };
 
@@ -136,6 +157,7 @@ impl MultiEngineSynth {
                 engine,
                 audio_channel,
                 cv_voices,
+                es5: is_es5,
             });
 
             instance_event_txs.push(event_tx);
@@ -181,9 +203,37 @@ impl MultiEngineSynth {
         // Pitch buffers for CV voices; grown lazily as we encounter CV instances
         let mut cv_pitch_buffers: Vec<Vec<f32>> = Vec::new();
 
+        // Temporary buffers for ES5 stereo output
+        let mut es5_right_buffer = vec![0.0f32; frames];
+
         // Process each instance
         for instance in &mut self.instances {
-            if let Some(voice_count) = instance.cv_voices {
+            if instance.es5 {
+                // ES5 dual-channel processing: left and right encoded gate data
+                mono_buffer.fill(0.0);
+                es5_right_buffer.fill(0.0);
+
+                if let EngineType::ES5(engine) = &mut instance.engine {
+                    engine.process_dual_channel(
+                        &mut mono_buffer[..frames],
+                        &mut es5_right_buffer[..frames],
+                    );
+                }
+
+                // Route left to audio_channel, right to audio_channel+1
+                let left_ch = instance.audio_channel;
+                let right_ch = instance.audio_channel + 1;
+                if left_ch < num_channels {
+                    for frame_idx in 0..frames {
+                        output[frame_idx * num_channels + left_ch] += mono_buffer[frame_idx];
+                    }
+                }
+                if right_ch < num_channels {
+                    for frame_idx in 0..frames {
+                        output[frame_idx * num_channels + right_ch] += es5_right_buffer[frame_idx];
+                    }
+                }
+            } else if let Some(voice_count) = instance.cv_voices {
                 // CV multi-channel processing:
                 // Gate -> audio_channel, pitch voices -> audio_channel+1, audio_channel+2, ...
 

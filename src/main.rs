@@ -265,6 +265,23 @@ fn run_config_mode(
         cv_parameters.push(params);
     }
 
+    // Create engine specs for each ES5 instance
+    let mut es5_configs_for_ui = Vec::new();
+
+    for es5_config in &config.es5 {
+        let trigger_notes = es5_config.parse_output_notes()?;
+
+        instances.push((
+            EngineSpec::ES5 {
+                trigger_notes,
+                midi_channel: es5_config.midi_channel_filter(),
+            },
+            es5_config.audio_channel_index(),
+        ));
+
+        es5_configs_for_ui.push(es5_config.clone());
+    }
+
     // Connect to MIDI device (no channel filtering - filtering happens per-engine)
     let dummy_params = Arc::new(SynthParameters::default());
     let _midi_handler = MidiHandler::new_with_device(event_tx, selected_midi_device, dummy_params)?;
@@ -290,6 +307,20 @@ fn run_config_mode(
                 "CV instance {} requires up to channel {} but device only has {} channels",
                 idx,
                 last_ch + 1, // Display as 1-indexed
+                num_channels
+            ));
+        }
+    }
+
+    // Validate ES5 instances have enough channels (stereo pair)
+    for (idx, es5_config) in config.es5.iter().enumerate() {
+        let base_ch = es5_config.audio_channel_index(); // 0-indexed
+        if base_ch + 1 >= num_channels {
+            return Err(anyhow::anyhow!(
+                "ES5 instance {} requires channels {}-{} but device only has {} channels",
+                idx,
+                es5_config.audioch,
+                es5_config.audioch + 1,
                 num_channels
             ));
         }
@@ -327,6 +358,7 @@ fn run_config_mode(
         config.drums.clone(),
         cv_parameters,
         config.cv.clone(),
+        es5_configs_for_ui,
     );
 
     // Run UI loop
