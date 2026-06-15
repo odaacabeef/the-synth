@@ -5,6 +5,7 @@ use crate::instruments::poly16::{SynthEngine, SynthParameters};
 use crate::instruments::drums::{DrumEngine, DrumParameters};
 use crate::instruments::cv::{CVEngine, CVParameters};
 use crate::instruments::es5::ES5Engine;
+use crate::instruments::sampler::{SampleData, SamplerEngine, SamplerParameters};
 use crate::types::events::SynthEvent;
 
 /// Specification for creating an engine instance
@@ -28,14 +29,23 @@ pub enum EngineSpec {
         trigger_notes: Vec<u8>,
         midi_channel: u8,
     },
+    Sampler {
+        sample: Arc<SampleData>,
+        parameters: Arc<SamplerParameters>,
+        root: u8,
+        range: Option<(u8, u8)>,
+        midi_channel: u8,
+        voices: usize,
+    },
 }
 
-/// Engine type - can be either a synth, drum, or CV
+/// Engine type - can be either a synth, drum, CV, ES5, or sampler
 pub enum EngineType {
     Synth(SynthEngine),
     Drum(DrumEngine),
     CV(CVEngine),
     ES5(ES5Engine),
+    Sampler(SamplerEngine),
 }
 
 impl EngineType {
@@ -44,6 +54,7 @@ impl EngineType {
         match self {
             EngineType::Synth(e) => e.process(output),
             EngineType::Drum(e) => e.process(output),
+            EngineType::Sampler(e) => e.process(output),
             EngineType::CV(_) => panic!("CV engines must use process_cv"),
             EngineType::ES5(_) => panic!("ES5 engines must use process_dual_channel"),
         }
@@ -56,6 +67,7 @@ impl EngineType {
             EngineType::Drum(e) => e.voice_states(),
             EngineType::CV(e) => e.voice_states(),
             EngineType::ES5(e) => e.voice_states(),
+            EngineType::Sampler(e) => e.voice_states(),
         }
     }
 }
@@ -150,6 +162,26 @@ impl MultiEngineSynth {
                         event_rx,
                     );
                     (EngineType::ES5(es5_engine), None, true)
+                }
+                EngineSpec::Sampler {
+                    sample,
+                    parameters,
+                    root,
+                    range,
+                    midi_channel,
+                    voices,
+                } => {
+                    let sampler_engine = SamplerEngine::new(
+                        sample,
+                        parameters,
+                        root,
+                        range,
+                        midi_channel,
+                        voices,
+                        sample_rate,
+                        event_rx,
+                    );
+                    (EngineType::Sampler(sampler_engine), None, false)
                 }
             };
 
