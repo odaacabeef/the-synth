@@ -48,6 +48,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                         app.next_cv_parameter();
                     }
                     MultiInstance::ES5 { .. } => {}
+                    MultiInstance::Sampler { .. } => {
+                        app.next_sampler_parameter();
+                    }
                 }
             }
         }
@@ -65,6 +68,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                         app.prev_cv_parameter();
                     }
                     MultiInstance::ES5 { .. } => {}
+                    MultiInstance::Sampler { .. } => {
+                        app.prev_sampler_parameter();
+                    }
                 }
             }
         }

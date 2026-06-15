@@ -1,8 +1,12 @@
 use std::sync::{atomic::Ordering, Arc};
 use crate::instruments::poly16::SynthParameters;
-use crate::config::{CVInstanceConfig, DrumInstanceConfig, ES5InstanceConfig, SynthInstanceConfig};
+use crate::config::{
+    CVInstanceConfig, DrumInstanceConfig, ES5InstanceConfig, SamplerInstanceConfig,
+    SynthInstanceConfig,
+};
 use crate::instruments::drums::{DrumParameters, DrumType};
 use crate::instruments::cv::CVParameters;
+use crate::instruments::sampler::SamplerParameters;
 
 /// UI application state
 /// Tracks all editable parameters and UI state
@@ -13,6 +17,8 @@ pub struct App {
     pub selected_drum_param: DrumParameter,
     /// Currently selected CV parameter for editing (CVs)
     pub selected_cv_param: CVParameter,
+    /// Currently selected sampler parameter for editing (samplers)
+    pub selected_sampler_param: SamplerParameter,
     /// Multiple synth instances
     pub multi_instances: Vec<MultiInstance>,
     /// Currently selected instance index
@@ -44,6 +50,12 @@ pub enum MultiInstance {
     },
     ES5 {
         config: ES5InstanceConfig,
+        voice_states: [Option<u8>; 16],
+        last_trigger: Option<std::time::Instant>,
+    },
+    Sampler {
+        config: SamplerInstanceConfig,
+        parameters: Arc<SamplerParameters>,
         voice_states: [Option<u8>; 16],
         last_trigger: Option<std::time::Instant>,
     },
@@ -83,6 +95,15 @@ pub enum CVParameter {
     Glide,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SamplerParameter {
+    Gain,
+    Pitch,
+    Start,
+    Attack,
+    Release,
+}
+
 impl App {
     /// Create new app in multi-instance mode (config mode)
     pub fn new_multi_instance(
@@ -93,6 +114,8 @@ impl App {
         cv_parameters: Vec<Arc<CVParameters>>,
         cv_configs: Vec<CVInstanceConfig>,
         es5_configs: Vec<ES5InstanceConfig>,
+        sampler_parameters: Vec<Arc<SamplerParameters>>,
+        sampler_configs: Vec<SamplerInstanceConfig>,
     ) -> Self {
         let mut multi_instances = Vec::new();
 
@@ -134,6 +157,16 @@ impl App {
             });
         }
 
+        // Add sampler instances
+        for (params, config) in sampler_parameters.into_iter().zip(sampler_configs.into_iter()) {
+            multi_instances.push(MultiInstance::Sampler {
+                config,
+                parameters: params,
+                voice_states: [None; 16],
+                last_trigger: None,
+            });
+        }
+
         // Initialize selected_drum_param based on first drum type (if any)
         let selected_drum_param = multi_instances
             .iter()
@@ -154,6 +187,7 @@ impl App {
             selected_param: Parameter::Attack,
             selected_drum_param,
             selected_cv_param: CVParameter::Transpose,
+            selected_sampler_param: SamplerParameter::Gain,
             multi_instances,
             current_instance: 0,
             should_quit: false,
@@ -261,6 +295,13 @@ impl App {
                     CVParameter::Glide => 1,
                 },
                 MultiInstance::ES5 { .. } => 0,
+                MultiInstance::Sampler { .. } => match self.selected_sampler_param {
+                    SamplerParameter::Gain => 0,
+                    SamplerParameter::Pitch => 1,
+                    SamplerParameter::Start => 2,
+                    SamplerParameter::Attack => 3,
+                    SamplerParameter::Release => 4,
+                },
             }
         } else {
             0
@@ -322,6 +363,16 @@ impl App {
                 MultiInstance::ES5 { .. } => {
                     // ES5 has no editable parameters
                 }
+                MultiInstance::Sampler { .. } => {
+                    // Sampler has 5 parameters (0-4)
+                    self.selected_sampler_param = match index {
+                        0 => SamplerParameter::Gain,
+                        1 => SamplerParameter::Pitch,
+                        2 => SamplerParameter::Start,
+                        3 => SamplerParameter::Attack,
+                        _ => SamplerParameter::Release, // 4 or higher
+                    };
+                }
             }
         }
     }
@@ -355,6 +406,16 @@ impl App {
                     MultiInstance::ES5 { voice_states: vs, last_trigger, .. } => {
                         // Detect any gate going from off to on
                         for i in 0..6 {
+                            if vs[i].is_none() && voice_states[i].is_some() {
+                                *last_trigger = Some(std::time::Instant::now());
+                                break;
+                            }
+                        }
+                        *vs = voice_states;
+                    }
+                    MultiInstance::Sampler { voice_states: vs, last_trigger, .. } => {
+                        // Detect a new trigger: any voice slot going from None to Some
+                        for i in 0..16 {
                             if vs[i].is_none() && voice_states[i].is_some() {
                                 *last_trigger = Some(std::time::Instant::now());
                                 break;
@@ -459,11 +520,34 @@ impl App {
         };
     }
 
+    /// Cycle to next sampler parameter
+    pub fn next_sampler_parameter(&mut self) {
+        self.selected_sampler_param = match self.selected_sampler_param {
+            SamplerParameter::Gain => SamplerParameter::Pitch,
+            SamplerParameter::Pitch => SamplerParameter::Start,
+            SamplerParameter::Start => SamplerParameter::Attack,
+            SamplerParameter::Attack => SamplerParameter::Release,
+            SamplerParameter::Release => SamplerParameter::Gain,
+        };
+    }
+
+    /// Cycle to previous sampler parameter
+    pub fn prev_sampler_parameter(&mut self) {
+        self.selected_sampler_param = match self.selected_sampler_param {
+            SamplerParameter::Gain => SamplerParameter::Release,
+            SamplerParameter::Pitch => SamplerParameter::Gain,
+            SamplerParameter::Start => SamplerParameter::Pitch,
+            SamplerParameter::Attack => SamplerParameter::Start,
+            SamplerParameter::Release => SamplerParameter::Attack,
+        };
+    }
+
     /// Increase selected parameter value
     pub fn increase_value(&mut self) {
         let selected = self.selected_param;
         let selected_drum_param = self.selected_drum_param;
         let selected_cv_param = self.selected_cv_param;
+        let selected_sampler_param = self.selected_sampler_param;
 
         if let Some(instance) = self.current_instance_mut() {
             match instance {
@@ -562,6 +646,26 @@ impl App {
                     self.sync_multi_instance_to_audio();
                 }
                 MultiInstance::ES5 { .. } => {}
+                MultiInstance::Sampler { config, .. } => {
+                    match selected_sampler_param {
+                        SamplerParameter::Gain => {
+                            config.gain = (config.gain + 0.5).min(24.0);
+                        }
+                        SamplerParameter::Pitch => {
+                            config.pitch = (config.pitch + 1).min(24);
+                        }
+                        SamplerParameter::Start => {
+                            config.start = (config.start + 0.01).min(1.0);
+                        }
+                        SamplerParameter::Attack => {
+                            config.attack = (config.attack + 0.01).min(10.0);
+                        }
+                        SamplerParameter::Release => {
+                            config.release = (config.release + 0.01).min(10.0);
+                        }
+                    }
+                    self.sync_multi_instance_to_audio();
+                }
             }
         }
     }
@@ -571,6 +675,7 @@ impl App {
         let selected = self.selected_param;
         let selected_drum_param = self.selected_drum_param;
         let selected_cv_param = self.selected_cv_param;
+        let selected_sampler_param = self.selected_sampler_param;
 
         if let Some(instance) = self.current_instance_mut() {
             match instance {
@@ -669,6 +774,26 @@ impl App {
                     self.sync_multi_instance_to_audio();
                 }
                 MultiInstance::ES5 { .. } => {}
+                MultiInstance::Sampler { config, .. } => {
+                    match selected_sampler_param {
+                        SamplerParameter::Gain => {
+                            config.gain = (config.gain - 0.5).max(-60.0);
+                        }
+                        SamplerParameter::Pitch => {
+                            config.pitch = (config.pitch - 1).max(-24);
+                        }
+                        SamplerParameter::Start => {
+                            config.start = (config.start - 0.01).max(0.0);
+                        }
+                        SamplerParameter::Attack => {
+                            config.attack = (config.attack - 0.01).max(0.0);
+                        }
+                        SamplerParameter::Release => {
+                            config.release = (config.release - 0.01).max(0.0);
+                        }
+                    }
+                    self.sync_multi_instance_to_audio();
+                }
             }
         }
     }
@@ -734,6 +859,17 @@ impl App {
                     parameters.glide.store(config.glide, Ordering::Relaxed);
                 }
                 MultiInstance::ES5 { .. } => {}
+                MultiInstance::Sampler {
+                    config,
+                    parameters,
+                    ..
+                } => {
+                    parameters.gain_db.store(config.gain, Ordering::Relaxed);
+                    parameters.pitch.store(config.pitch as f32, Ordering::Relaxed);
+                    parameters.start.store(config.start, Ordering::Relaxed);
+                    parameters.attack.store(config.attack, Ordering::Relaxed);
+                    parameters.release.store(config.release, Ordering::Relaxed);
+                }
             }
         }
     }

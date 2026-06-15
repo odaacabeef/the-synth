@@ -6,7 +6,7 @@ mod midi;
 mod types;
 mod ui;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use crossterm::{
@@ -282,6 +282,47 @@ fn run_config_mode(
         es5_configs_for_ui.push(es5_config.clone());
     }
 
+    // Create engine specs for each sampler instance
+    let mut sampler_parameters = Vec::new();
+
+    // WAV paths are resolved relative to the config file's directory
+    let config_dir = config_path.parent().map(|p| p.to_path_buf());
+
+    for sampler_config in &config.sampler {
+        let file_path = match &config_dir {
+            Some(dir) => dir.join(&sampler_config.file),
+            None => std::path::PathBuf::from(&sampler_config.file),
+        };
+
+        let sample = instruments::sampler::load_wav(&file_path)
+            .with_context(|| format!("Failed to load sampler WAV: {}", file_path.display()))?;
+
+        let params = Arc::new(instruments::sampler::SamplerParameters::new_with_config(
+            sampler_config.gain,
+            sampler_config.pitch as f32,
+            sampler_config.start,
+            sampler_config.attack,
+            sampler_config.release,
+        ));
+
+        let root = sampler_config.parse_root()?;
+        let range = sampler_config.parse_range()?;
+
+        instances.push((
+            EngineSpec::Sampler {
+                sample,
+                parameters: params.clone(),
+                root,
+                range,
+                midi_channel: sampler_config.midi_channel_filter(),
+                voices: sampler_config.voices,
+            },
+            sampler_config.audio_channel_index(),
+        ));
+
+        sampler_parameters.push(params);
+    }
+
     // Connect to MIDI device (no channel filtering - filtering happens per-engine)
     let dummy_params = Arc::new(SynthParameters::default());
     let _midi_handler = MidiHandler::new_with_device(event_tx, selected_midi_device, dummy_params)?;
@@ -326,6 +367,19 @@ fn run_config_mode(
         }
     }
 
+    // Validate sampler instances have a valid (mono) output channel
+    for (idx, sampler_config) in config.sampler.iter().enumerate() {
+        let ch = sampler_config.audio_channel_index(); // 0-indexed
+        if ch >= num_channels {
+            return Err(anyhow::anyhow!(
+                "Sampler instance {} requires channel {} but device only has {} channels",
+                idx,
+                ch + 1,
+                num_channels
+            ));
+        }
+    }
+
     // Create voice state channels for UI
     let (voice_tx, voice_rx) = crossbeam_channel::unbounded::<Vec<[Option<u8>; 16]>>();
 
@@ -359,6 +413,8 @@ fn run_config_mode(
         cv_parameters,
         config.cv.clone(),
         es5_configs_for_ui,
+        sampler_parameters,
+        config.sampler.clone(),
     );
 
     // Run UI loop

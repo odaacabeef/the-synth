@@ -1,0 +1,59 @@
+# Example configuration for the sampler instrument.
+#
+# Each sampler instance plays one WAV file, triggered by MIDI notes.
+# WAV paths are resolved relative to this config file's directory.
+#
+# Note mapping:
+#   root           note that plays the sample at its recorded pitch (required)
+#   range          optional [low, high] span for melodic playback; must
+#                  surround root. Notes in the range are repitched by
+#                  (note - root) semitones. Omit range for a fixed-pitch
+#                  one-shot that only triggers on root.
+#
+# A "kit" is just several instances sharing one audio channel: they sum
+# onto the same output.
+#
+# Parameters (all live-editable in the UI):
+#   voices    polyphony, 1-16 (1 = monophonic retrigger)
+#   gain      dB trim (-60 to +24); samples vary in level, so this calibrates
+#   pitch     semitone offset (-24 to +24)
+#   start     0..1 offset into the sample
+#   attack    fade-in seconds (declick)
+#   release   fade-out seconds (declick)
+#
+# Tip: run your audio output device at the same sample rate as your WAV files.
+# The sampler resamples on mismatch using linear interpolation, which can sound
+# gritty - especially when the device rate is below the file rate.
+
+devices:
+  midiin: mc-source-a
+  audioout: Blackhole 16ch
+
+sampler:
+
+  # Fixed-pitch one-shot drum pad: only c2 triggers it.
+  - midich: 10
+    audioch: 1
+    file: samples/clap.wav
+    root: c2
+    gain: 0.0
+    release: 0.05
+
+  # Another pad on the same audio channel -> forms a kit on output 1.
+  - midich: 10
+    audioch: 1
+    file: samples/rim.wav
+    root: d2
+    gain: -3.0
+
+  # Melodic: one sample played chromatically across two octaves, 8-voice
+  # polyphonic for chords and overlapping tails.
+  - midich: 1
+    audioch: 2
+    file: samples/piano-c3.wav
+    root: c3
+    range: [c2, c5]
+    voices: 8
+    gain: -3.0
+    attack: 0.005
+    release: 0.2
