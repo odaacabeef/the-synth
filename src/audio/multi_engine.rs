@@ -424,4 +424,43 @@ mod tests {
         assert!(ch0_has_audio, "Channel 0 should have audio");
         assert!(!ch1_has_audio, "Channel 1 should be silent");
     }
+
+    #[test]
+    fn test_sampler_routing() {
+        use crate::instruments::sampler::{SampleData, SamplerParameters};
+
+        let (event_tx, event_rx) = unbounded();
+
+        let sample = Arc::new(SampleData {
+            samples: vec![0.5; 4410],
+            sample_rate: 44100.0,
+        });
+        let params = Arc::new(SamplerParameters::new());
+
+        let instances = vec![(
+            EngineSpec::Sampler {
+                sample,
+                parameters: params,
+                root: 60,
+                range: None,
+                midi_channel: 0,
+                voices: 1,
+            },
+            1, // audio channel index 1 (second channel)
+        )];
+
+        let mut multi = MultiEngineSynth::new(44100.0, instances, event_rx);
+
+        // Trigger the root note on MIDI channel 0
+        let _ = event_tx.try_send(SynthEvent::note_on(0, 60, 261.6, 1.0));
+
+        let mut output = vec![0.0f32; 256 * 2]; // 256 frames, 2 channels
+        multi.process(&mut output, 2);
+
+        let ch0_has_audio = output.iter().step_by(2).any(|&s| s.abs() > 0.001);
+        let ch1_has_audio = output.iter().skip(1).step_by(2).any(|&s| s.abs() > 0.001);
+
+        assert!(!ch0_has_audio, "Channel 0 should be silent");
+        assert!(ch1_has_audio, "Channel 1 should have sampler audio");
+    }
 }
