@@ -20,6 +20,10 @@
 #   start     0..1 offset into the sample
 #   attack    fade-in seconds (declick)
 #   release   fade-out seconds (declick)
+#
+# Tip: run your audio output device at the same sample rate as your WAV files.
+# The sampler resamples on mismatch using linear interpolation, which can sound
+# gritty - especially when the device rate is below the file rate.
 
 devices:
   midiin: mc-source-a
