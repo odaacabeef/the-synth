@@ -42,6 +42,11 @@ fn render_multi_instance(frame: &mut Frame, app: &App) {
         matches!(inst, MultiInstance::Drum { .. })
     });
 
+    // Find the index where samplers start (for divider placement)
+    let first_sampler_idx = app.multi_instances.iter().position(|inst| {
+        matches!(inst, MultiInstance::Sampler { .. })
+    });
+
     for (idx, instance) in app.multi_instances.iter().enumerate() {
         let is_selected = idx == app.current_instance;
         let instance_lines = build_instance_lines(
@@ -53,11 +58,11 @@ fn render_multi_instance(frame: &mut Frame, app: &App) {
             app.selected_sampler_param,
         );
 
-        // Determine spacing: add divider before first drum
+        // Determine spacing: add divider before the first drum and first sampler
         let spacing = if idx == 0 {
             ""
-        } else if Some(idx) == first_drum_idx {
-            "  :" // Divider between poly16 and drums (2 spaces + :)
+        } else if Some(idx) == first_drum_idx || Some(idx) == first_sampler_idx {
+            "  :" // Divider before the drums / sampler groups (2 spaces + :)
         } else {
             " " // Regular spacing
         };
