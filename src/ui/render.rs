@@ -521,16 +521,37 @@ fn build_sampler_lines(
     lines.push(String::new()); // Blank line
     lines.push(String::new()); // Blank line
 
-    // File and note mapping (line 13, compact)
+    // Sample name (no prefix): wrapped onto up to NAME_ROWS lines, then
+    // truncated with a trailing "..." so long names can't widen the instance.
+    const NAME_WIDTH: usize = 16; // characters per name line
+    const NAME_ROWS: usize = 2;
     let stem = std::path::Path::new(&config.file)
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or(config.file.as_str());
+
+    let mut name_chars: Vec<char> = stem.chars().collect();
+    if name_chars.len() > NAME_WIDTH * NAME_ROWS {
+        name_chars.truncate(NAME_WIDTH * NAME_ROWS - 3);
+        name_chars.extend(['.', '.', '.']);
+    }
+    for row in 0..NAME_ROWS {
+        let start = row * NAME_WIDTH;
+        let chunk: String = if start < name_chars.len() {
+            let end = (start + NAME_WIDTH).min(name_chars.len());
+            name_chars[start..end].iter().collect()
+        } else {
+            String::new()
+        };
+        lines.push(format!("  {}", chunk));
+    }
+
+    // Note mapping (root, plus range if melodic)
     let mapping = match &config.range {
         Some(range) if range.len() == 2 => format!("{} {}-{}", config.root, range[0], range[1]),
         _ => config.root.clone(),
     };
-    lines.push(format!("  smp: {} ({})", stem, mapping));
+    lines.push(format!("  {}", mapping));
 
     // Pad to match other instruments (16 lines total)
     while lines.len() < 16 {
@@ -538,6 +559,15 @@ fn build_sampler_lines(
     }
 
     pad_lines(&mut lines);
+
+    // Fixed panel width so long sample names don't widen the instance.
+    const FIXED_WIDTH: usize = 2 + NAME_WIDTH;
+    for line in lines.iter_mut() {
+        if line.len() < FIXED_WIDTH {
+            line.push_str(&" ".repeat(FIXED_WIDTH - line.len()));
+        }
+    }
+
     lines
 }
 
@@ -586,4 +616,66 @@ fn render_synthesizer_help(frame: &mut Frame) {
 
     let paragraph = Paragraph::new(help_text);
     frame.render_widget(paragraph, frame.size());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sampler_config(file: &str, range: Option<Vec<String>>) -> crate::config::SamplerInstanceConfig {
+        crate::config::SamplerInstanceConfig {
+            midich: crate::config::MidiChannelSpec::Channel(1),
+            audioch: 5,
+            file: file.to_string(),
+            root: "c2".to_string(),
+            range,
+            voices: 1,
+            gain: 0.0,
+            pitch: 0,
+            start: 0.0,
+            attack: 0.0,
+            release: 0.05,
+        }
+    }
+
+    #[test]
+    fn test_sampler_lines_fixed_width_and_no_prefix() {
+        let config = sampler_config("samples/short.wav", None);
+        let lines = build_sampler_lines(&config, &[None; 16], None, false, SamplerParameter::Gain);
+
+        // Every line shares the same fixed width.
+        assert!(lines.iter().all(|l| l.len() == 18), "all lines must be fixed width 18");
+        // The old "smp:" prefix is gone.
+        assert!(lines.iter().all(|l| !l.contains("smp:")));
+        // Short name on the first name row, blank second row, mapping below.
+        assert_eq!(lines[12].trim(), "short");
+        assert_eq!(lines[13].trim(), "");
+        assert_eq!(lines[14].trim(), "c2");
+    }
+
+    #[test]
+    fn test_sampler_lines_long_name_truncated() {
+        // 40-char stem exceeds the 2 x 16 = 32 char budget.
+        let long = "a".repeat(40);
+        let config = sampler_config(&format!("samples/{}.wav", long), None);
+        let lines = build_sampler_lines(&config, &[None; 16], None, false, SamplerParameter::Gain);
+
+        let row1: String = lines[12].trim().to_string();
+        let row2: String = lines[13].trim().to_string();
+        assert_eq!(row1.chars().count(), 16);
+        assert_eq!(row2.chars().count(), 16);
+        let combined = format!("{}{}", row1, row2);
+        assert_eq!(combined.chars().count(), 32); // 29 name chars + "..."
+        assert!(combined.ends_with("..."));
+    }
+
+    #[test]
+    fn test_sampler_lines_range_mapping() {
+        let config = sampler_config(
+            "samples/piano.wav",
+            Some(vec!["c2".to_string(), "c5".to_string()]),
+        );
+        let lines = build_sampler_lines(&config, &[None; 16], None, false, SamplerParameter::Gain);
+        assert_eq!(lines[14].trim(), "c2 c2-c5");
+    }
 }
