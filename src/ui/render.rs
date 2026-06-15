@@ -547,30 +547,21 @@ fn build_sampler_lines(
 
     lines.push(String::new()); // Blank line
 
-    // Sample name (no prefix): wrapped onto up to NAME_ROWS lines, then
-    // truncated with a trailing "..." so long names can't widen the instance.
-    const NAME_WIDTH: usize = 16; // characters per name line
-    const NAME_ROWS: usize = 2;
+    // Sample name (no prefix): a single line showing what fits, truncated with
+    // a trailing "..." so long names can't widen the instance.
+    const NAME_WIDTH: usize = 16; // characters shown for the name
     let stem = std::path::Path::new(&config.file)
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or(config.file.as_str());
 
     let mut name_chars: Vec<char> = stem.chars().collect();
-    if name_chars.len() > NAME_WIDTH * NAME_ROWS {
-        name_chars.truncate(NAME_WIDTH * NAME_ROWS - 3);
+    if name_chars.len() > NAME_WIDTH {
+        name_chars.truncate(NAME_WIDTH - 3);
         name_chars.extend(['.', '.', '.']);
     }
-    for row in 0..NAME_ROWS {
-        let start = row * NAME_WIDTH;
-        let chunk: String = if start < name_chars.len() {
-            let end = (start + NAME_WIDTH).min(name_chars.len());
-            name_chars[start..end].iter().collect()
-        } else {
-            String::new()
-        };
-        lines.push(format!("  {}", chunk));
-    }
+    let name: String = name_chars.iter().collect();
+    lines.push(format!("  {}", name));
 
     // Note mapping (root, plus range if melodic)
     let mapping = match &config.range {
@@ -673,26 +664,21 @@ mod tests {
         assert!(lines.iter().all(|l| l.len() == 18), "all lines must be fixed width 18");
         // The old "smp:" prefix is gone.
         assert!(lines.iter().all(|l| !l.contains("smp:")));
-        // Short name on the first name row, blank second row, mapping below.
+        // Short name on its single line, mapping directly below.
         assert_eq!(lines[11].trim(), "short");
-        assert_eq!(lines[12].trim(), "");
-        assert_eq!(lines[13].trim(), "c2");
+        assert_eq!(lines[12].trim(), "c2");
     }
 
     #[test]
     fn test_sampler_lines_long_name_truncated() {
-        // 40-char stem exceeds the 2 x 16 = 32 char budget.
+        // 40-char stem exceeds the single 16-char line.
         let long = "a".repeat(40);
         let config = sampler_config(&format!("samples/{}.wav", long), None);
         let lines = build_sampler_lines(&config, &[None; 16], None, false, SamplerParameter::Gain);
 
-        let row1: String = lines[11].trim().to_string();
-        let row2: String = lines[12].trim().to_string();
-        assert_eq!(row1.chars().count(), 16);
-        assert_eq!(row2.chars().count(), 16);
-        let combined = format!("{}{}", row1, row2);
-        assert_eq!(combined.chars().count(), 32); // 29 name chars + "..."
-        assert!(combined.ends_with("..."));
+        let name = lines[11].trim();
+        assert_eq!(name.chars().count(), 16); // 13 name chars + "..."
+        assert!(name.ends_with("..."));
     }
 
     #[test]
@@ -702,7 +688,7 @@ mod tests {
             Some(vec!["c2".to_string(), "c5".to_string()]),
         );
         let lines = build_sampler_lines(&config, &[None; 16], None, false, SamplerParameter::Gain);
-        assert_eq!(lines[13].trim(), "c2 c2-c5");
+        assert_eq!(lines[12].trim(), "c2 c2-c5");
     }
 
     #[test]
