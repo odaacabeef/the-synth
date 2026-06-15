@@ -8,7 +8,7 @@ use super::app::{App, CVParameter, DrumParameter, MultiInstance, Parameter, Samp
 use crate::instruments::drums::DrumType;
 
 /// Render the TUI
-pub fn render(frame: &mut Frame, app: &App) {
+pub fn render(frame: &mut Frame, app: &mut App) {
     // Show help screen if toggled
     if app.show_help {
         render_synthesizer_help(frame);
@@ -25,30 +25,101 @@ fn midi_note_to_name(note: u8) -> String {
     format!("{}{}", note_name, octave)
 }
 
-/// Render multi-instance screen with all instances side-by-side
-fn render_multi_instance(frame: &mut Frame, app: &App) {
+/// Render multi-instance screen with all instances side-by-side, scrolling
+/// horizontally so the selected instance stays within the viewport.
+fn render_multi_instance(frame: &mut Frame, app: &mut App) {
     if app.multi_instances.is_empty() {
         let paragraph = Paragraph::new(vec![Line::from("No instances configured")]);
         frame.render_widget(paragraph, frame.size());
         return;
     }
 
-    // Convert to ratatui Lines and render
-    let lines: Vec<Line> = build_screen_lines(app, 20)
-        .into_iter()
-        .map(|s| Line::from(s))
+    let area = frame.size();
+    let viewport_w = area.width as usize;
+
+    let layout = build_screen_lines(app, 20);
+    let total_w = layout.lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);
+
+    // Adjust the horizontal scroll offset so the selected instance is in view.
+    let scroll = compute_scroll(
+        app.scroll_x,
+        viewport_w,
+        total_w,
+        &layout.starts,
+        &layout.widths,
+        app.current_instance,
+    );
+    app.scroll_x = scroll;
+
+    // Slice each row to the visible window [scroll, scroll + viewport_w).
+    let lines: Vec<Line> = layout
+        .lines
+        .iter()
+        .map(|line| {
+            let chars: Vec<char> = line.chars().collect();
+            let start = scroll.min(chars.len());
+            let end = (scroll + viewport_w).min(chars.len());
+            Line::from(chars[start..end].iter().collect::<String>())
+        })
         .collect();
 
     let paragraph = Paragraph::new(lines);
-    frame.render_widget(paragraph, frame.size());
+    frame.render_widget(paragraph, area);
 }
 
-/// Assemble the full multi-instance screen as plain text rows.
+/// Geometry of the assembled multi-instance screen.
+struct ScreenLayout {
+    /// Combined text rows spanning every instance.
+    lines: Vec<String>,
+    /// Start column of each instance's block within the rows.
+    starts: Vec<usize>,
+    /// Width (in columns) of each instance's block.
+    widths: Vec<usize>,
+}
+
+/// Compute the horizontal scroll offset that keeps the selected instance fully
+/// visible, moving the previous offset by the minimum amount needed.
+fn compute_scroll(
+    prev: usize,
+    viewport_w: usize,
+    total_w: usize,
+    starts: &[usize],
+    widths: &[usize],
+    current: usize,
+) -> usize {
+    // Everything fits (or no width to work with): no scrolling.
+    if viewport_w == 0 || total_w <= viewport_w {
+        return 0;
+    }
+    let max_scroll = total_w - viewport_w;
+
+    let s = starts.get(current).copied().unwrap_or(0);
+    let w = widths.get(current).copied().unwrap_or(0);
+    let e = s + w;
+    // Left edge taken at the leading divider/space so it isn't clipped flush.
+    let lead = if current == 0 {
+        0
+    } else {
+        starts[current - 1] + widths[current - 1]
+    };
+
+    let mut scroll = prev.min(max_scroll);
+    if lead < scroll {
+        scroll = lead; // scrolled too far right - reveal the left edge
+    }
+    if e > scroll + viewport_w {
+        scroll = e - viewport_w; // scrolled too far left - reveal the right edge
+    }
+    scroll.min(max_scroll)
+}
+
+/// Assemble the full multi-instance screen as plain-text rows plus the column
+/// geometry of each instance (used to drive viewport scrolling).
 ///
 /// Each instance is rendered to a fixed-width, fixed-height column block; the
 /// blocks are concatenated side by side with ":" dividers before the first
 /// drum and first sampler groups.
-fn build_screen_lines(app: &App, max_lines: usize) -> Vec<String> {
+fn build_screen_lines(app: &App, max_lines: usize) -> ScreenLayout {
     // A ":" divider is drawn before the first drum and the first sampler,
     // separating those groups from the instruments to their left.
     let first_drum_idx = app
@@ -76,7 +147,32 @@ fn build_screen_lines(app: &App, max_lines: usize) -> Vec<String> {
         divider_before.push(Some(idx) == first_drum_idx || Some(idx) == first_sampler_idx);
     }
 
-    combine_columns(&blocks, &divider_before, max_lines)
+    // Column geometry: each instance's start column and block width, matching
+    // the spacing combine_columns inserts ("" first, "  :" divider, else " ").
+    let mut starts = Vec::with_capacity(blocks.len());
+    let mut widths = Vec::with_capacity(blocks.len());
+    let mut pos = 0usize;
+    for (i, block) in blocks.iter().enumerate() {
+        let spacing = if i == 0 {
+            0
+        } else if divider_before[i] {
+            3
+        } else {
+            1
+        };
+        pos += spacing;
+        starts.push(pos);
+        let w = block.first().map(|l| l.chars().count()).unwrap_or(0);
+        widths.push(w);
+        pos += w;
+    }
+
+    let lines = combine_columns(&blocks, &divider_before, max_lines);
+    ScreenLayout {
+        lines,
+        starts,
+        widths,
+    }
 }
 
 /// Merge per-instance column blocks into horizontal rows.
@@ -776,7 +872,7 @@ mod tests {
             ],
         );
 
-        let lines = build_screen_lines(&app, 20);
+        let lines = build_screen_lines(&app, 20).lines;
 
         // Rectangular block: every row is the same width.
         let w = lines[0].len();
@@ -786,5 +882,45 @@ mod tests {
         // Trailing divider-only rows trimmed; the last row carries real content.
         let last = lines.last().unwrap();
         assert!(last.chars().any(|c| c != ' ' && c != ':'), "last row should carry content");
+    }
+
+    // Three 18-wide instances separated by single spaces: starts 0, 19, 38;
+    // total width 56.
+    const STARTS: [usize; 3] = [0, 19, 38];
+    const WIDTHS: [usize; 3] = [18, 18, 18];
+    const TOTAL: usize = 56;
+
+    #[test]
+    fn test_scroll_no_scroll_when_everything_fits() {
+        assert_eq!(compute_scroll(0, 80, TOTAL, &STARTS, &WIDTHS, 2), 0);
+        // A stale offset is also reset to 0 when content fits.
+        assert_eq!(compute_scroll(10, 80, TOTAL, &STARTS, &WIDTHS, 0), 0);
+    }
+
+    #[test]
+    fn test_scroll_reveals_right_edge() {
+        // Viewport 30 wide, select the last instance (ends at column 56).
+        let scroll = compute_scroll(0, 30, TOTAL, &STARTS, &WIDTHS, 2);
+        assert_eq!(scroll, 56 - 30); // right edge flush with the viewport
+        assert!(STARTS[2] >= scroll && STARTS[2] + WIDTHS[2] <= scroll + 30);
+    }
+
+    #[test]
+    fn test_scroll_reveals_left_edge() {
+        // Previously scrolled right, now select instance 0 - scroll back to it.
+        let scroll = compute_scroll(26, 30, TOTAL, &STARTS, &WIDTHS, 0);
+        assert_eq!(scroll, 0);
+    }
+
+    #[test]
+    fn test_scroll_unchanged_when_already_visible() {
+        // Instance 1 spans [19,37); with offset 10 and width 40 it is visible.
+        assert_eq!(compute_scroll(10, 40, TOTAL, &STARTS, &WIDTHS, 1), 10);
+    }
+
+    #[test]
+    fn test_scroll_clamped_to_max() {
+        let scroll = compute_scroll(9999, 30, TOTAL, &STARTS, &WIDTHS, 2);
+        assert_eq!(scroll, TOTAL - 30);
     }
 }

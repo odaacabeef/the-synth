@@ -27,6 +27,8 @@ pub struct App {
     pub should_quit: bool,
     /// Whether to show help screen
     pub show_help: bool,
+    /// Horizontal scroll offset (in columns) for the instance viewport
+    pub scroll_x: usize,
 }
 
 /// Multi-instance instrument data - can be either Synth or Drum
@@ -192,6 +194,7 @@ impl App {
             current_instance: 0,
             should_quit: false,
             show_help: false,
+            scroll_x: 0,
         }
     }
 
