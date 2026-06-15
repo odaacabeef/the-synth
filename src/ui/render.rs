@@ -549,26 +549,23 @@ fn build_sampler_lines(
 
     // Sample name (no prefix): a single line showing what fits, truncated with
     // a trailing "..." so long names can't widen the instance.
-    const NAME_WIDTH: usize = 16; // characters shown for the name
+    const NAME_WIDTH: usize = 16; // characters shown for the name / mapping
     let stem = std::path::Path::new(&config.file)
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or(config.file.as_str());
+    lines.push(format!("  {}", truncate_ellipsis(stem, NAME_WIDTH)));
 
-    let mut name_chars: Vec<char> = stem.chars().collect();
-    if name_chars.len() > NAME_WIDTH {
-        name_chars.truncate(NAME_WIDTH - 3);
-        name_chars.extend(['.', '.', '.']);
-    }
-    let name: String = name_chars.iter().collect();
-    lines.push(format!("  {}", name));
-
-    // Note mapping (root, plus range if melodic)
+    // Note mapping: root with its MIDI number (matching the drums display),
+    // plus the range if melodic.
+    let root_num = config.parse_root().unwrap_or(0);
     let mapping = match &config.range {
-        Some(range) if range.len() == 2 => format!("{} {}-{}", config.root, range[0], range[1]),
-        _ => config.root.clone(),
+        Some(range) if range.len() == 2 => {
+            format!("{} ({}) {}-{}", config.root, root_num, range[0], range[1])
+        }
+        _ => format!("{} ({})", config.root, root_num),
     };
-    lines.push(format!("  {}", mapping));
+    lines.push(format!("  {}", truncate_ellipsis(&mapping, NAME_WIDTH)));
 
     // Pad to match other instruments (16 lines total)
     while lines.len() < 16 {
@@ -605,6 +602,18 @@ fn add_sampler_param_line(
     };
     let label = format!("{}:", name);
     lines.push(format!("{} {:<width$} {}", cursor, label, value, width = width));
+}
+
+/// Truncate `s` to at most `width` characters, appending "..." when it is cut.
+fn truncate_ellipsis(s: &str, width: usize) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() <= width {
+        return s.to_string();
+    }
+    let keep = width.saturating_sub(3);
+    let mut out: Vec<char> = chars[..keep].to_vec();
+    out.extend(['.', '.', '.']);
+    out.iter().collect()
 }
 
 /// Pad all lines to same width for alignment
@@ -664,9 +673,9 @@ mod tests {
         assert!(lines.iter().all(|l| l.len() == 18), "all lines must be fixed width 18");
         // The old "smp:" prefix is gone.
         assert!(lines.iter().all(|l| !l.contains("smp:")));
-        // Short name on its single line, mapping directly below.
+        // Short name on its single line, mapping (with root MIDI number) below.
         assert_eq!(lines[11].trim(), "short");
-        assert_eq!(lines[12].trim(), "c2");
+        assert_eq!(lines[12].trim(), "c2 (36)");
     }
 
     #[test]
@@ -688,7 +697,7 @@ mod tests {
             Some(vec!["c2".to_string(), "c5".to_string()]),
         );
         let lines = build_sampler_lines(&config, &[None; 16], None, false, SamplerParameter::Gain);
-        assert_eq!(lines[12].trim(), "c2 c2-c5");
+        assert_eq!(lines[12].trim(), "c2 (36) c2-c5");
     }
 
     #[test]
