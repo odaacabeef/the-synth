@@ -4,7 +4,7 @@ use ratatui::{
     Frame,
 };
 
-use super::app::{App, CVParameter, DrumParameter, MultiInstance, Parameter};
+use super::app::{App, CVParameter, DrumParameter, MultiInstance, Parameter, SamplerParameter};
 use crate::instruments::drums::DrumType;
 
 /// Render the TUI
@@ -50,6 +50,7 @@ fn render_multi_instance(frame: &mut Frame, app: &App) {
             app.selected_param,
             app.selected_drum_param,
             app.selected_cv_param,
+            app.selected_sampler_param,
         );
 
         // Determine spacing: add divider before first drum
@@ -95,6 +96,7 @@ fn build_instance_lines(
     selected_param: Parameter,
     selected_drum_param: DrumParameter,
     selected_cv_param: CVParameter,
+    selected_sampler_param: SamplerParameter,
 ) -> Vec<String> {
     match instance {
         MultiInstance::Synth {
@@ -120,6 +122,12 @@ fn build_instance_lines(
             last_trigger,
             ..
         } => build_es5_lines(config, voice_states, *last_trigger),
+        MultiInstance::Sampler {
+            config,
+            voice_states,
+            last_trigger,
+            ..
+        } => build_sampler_lines(config, voice_states, *last_trigger, is_selected, selected_sampler_param),
     }
 }
 
@@ -460,6 +468,91 @@ fn build_es5_lines(
 
     pad_lines(&mut lines);
     lines
+}
+
+/// Build lines for a sampler instance
+fn build_sampler_lines(
+    config: &crate::config::SamplerInstanceConfig,
+    voice_states: &[Option<u8>; 16],
+    last_trigger: Option<std::time::Instant>,
+    is_selected: bool,
+    selected_sampler_param: SamplerParameter,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+
+    // MIDI channel string (1-indexed for display)
+    let midi_ch_str = if config.midi_channel_filter() == 255 {
+        "omni".to_string()
+    } else {
+        format!("{}", config.midi_channel_filter() + 1)
+    };
+
+    // Title line: m<midi>:a<audio>
+    lines.push(format!("  m{}:a{}", midi_ch_str, config.audioch));
+    lines.push(String::new()); // Blank line
+
+    // Parameters (label width aligns to longest, "Release:" = 8)
+    add_sampler_param_line(&mut lines, is_selected, selected_sampler_param, SamplerParameter::Gain, "Gain", format!("{:.1}dB", config.gain), 8);
+    add_sampler_param_line(&mut lines, is_selected, selected_sampler_param, SamplerParameter::Pitch, "Pitch", format!("{:+}", config.pitch), 8);
+    add_sampler_param_line(&mut lines, is_selected, selected_sampler_param, SamplerParameter::Start, "Start", format!("{:.2}", config.start), 8);
+    add_sampler_param_line(&mut lines, is_selected, selected_sampler_param, SamplerParameter::Attack, "Attack", format!("{:.3}s", config.attack), 8);
+    add_sampler_param_line(&mut lines, is_selected, selected_sampler_param, SamplerParameter::Release, "Release", format!("{:.3}s", config.release), 8);
+
+    lines.push(String::new()); // Blank line
+    lines.push(String::new()); // Blank line
+
+    // Voice / trigger indicator (line 10, matching other instruments)
+    let recently_triggered = last_trigger
+        .map(|t| t.elapsed().as_millis() < 80)
+        .unwrap_or(false);
+    let active_voices = voice_states.iter().filter(|v| v.is_some()).count();
+    let indicator = if active_voices > 0 || recently_triggered { "+++" } else { "---" };
+    if config.voices > 1 {
+        lines.push(format!("  {} {}/{}", indicator, active_voices, config.voices));
+    } else {
+        lines.push(format!("  {}", indicator));
+    }
+
+    lines.push(String::new()); // Blank line
+    lines.push(String::new()); // Blank line
+
+    // File and note mapping (line 13, compact)
+    let stem = std::path::Path::new(&config.file)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(config.file.as_str());
+    let mapping = match &config.range {
+        Some(range) if range.len() == 2 => format!("{} {}-{}", config.root, range[0], range[1]),
+        _ => config.root.clone(),
+    };
+    lines.push(format!("  smp: {} ({})", stem, mapping));
+
+    // Pad to match other instruments (16 lines total)
+    while lines.len() < 16 {
+        lines.push(String::new());
+    }
+
+    pad_lines(&mut lines);
+    lines
+}
+
+/// Helper to add a sampler parameter line with cursor indicator
+fn add_sampler_param_line(
+    lines: &mut Vec<String>,
+    is_selected: bool,
+    selected: SamplerParameter,
+    param: SamplerParameter,
+    name: &str,
+    value: String,
+    width: usize,
+) {
+    let cursor = if is_selected && selected == param {
+        ">"
+    } else {
+        " "
+    };
+    let label = format!("{}:", name);
+    lines.push(format!("{} {:<width$} {}", cursor, label, value, width = width));
 }
 
 /// Pad all lines to same width for alignment
