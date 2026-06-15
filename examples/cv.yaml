@@ -1,4 +1,4 @@
-# Example configuration for sending control voltage to an ES-9
+# Example configuration for an Expert Sleepers ES-9, with an ES-5 gate expander.
 # The 3.5mm outputs on the ES-9 are numbered 9-16
 # https://www.expert-sleepers.co.uk/es9.html
 #
@@ -30,3 +30,16 @@ cv:
     transpose: -12 # One octave down
     glide: 0       # No glide
     # note: "c2"   # Optional: only respond to this MIDI note
+
+# The ES-5 connects to the ES-9 via ribbon cable and encodes up to 6 gates into
+# a stereo audio pair. Route two outputs to "ES-5 L"/"ES-5 R" in the ES-9 config
+# tool (channels 7/8 here) and save to flash.
+es5:
+
+  - midich: 10     # gate triggers on MIDI channel 10
+    audioch: 7     # stereo pair: ES-5 L on 7, ES-5 R on 8
+    outputs:
+      - note: c1   # output 1
+      - note: d1   # output 2
+      - note: e1   # output 3
+      - note: f1   # output 4

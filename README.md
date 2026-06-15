@@ -1,9 +1,10 @@
 # the-synth
 
-A multi-instance MIDI synthesizer, drum machine, CV generator, and gate encoder for
-the terminal. Run multiple 16-voice polyphonic synthesizers, physically-modeled drum
-engines, control voltage outputs, and ES-5 gate outputs simultaneously, each with
-independent parameter control and configurable MIDI/audio channel routing.
+A multi-instance MIDI synthesizer, drum machine, sampler, CV generator, and gate
+encoder for the terminal. Run multiple 16-voice polyphonic synthesizers,
+physically-modeled drum engines, WAV samplers, control voltage outputs, and ES-5
+gate outputs simultaneously, each with independent parameter control and
+configurable MIDI/audio channel routing.
 
 ## Usage
 
@@ -18,7 +19,7 @@ the-synth --help
 the-synth --list
 
 # Run with configuration file
-the-synth --config example-config.yaml
+the-synth --config examples/basic.yaml
 
 # Run with default config path (expects synth.yaml in current directory)
 the-synth
@@ -78,6 +79,25 @@ drums:
     hdecay: 0.05
     metallic: 0.4
 
+sampler:
+  - midich: 1               # MIDI channel for sample triggers
+    audioch: 5              # Audio output channel (mono)
+    file: samples/clap.wav  # WAV path, relative to the config file
+    root: c2                # Note that plays the sample at its recorded pitch
+    voices: 1               # Polyphony 1-16 (1 = mono retrigger)
+    gain: 0.0               # dB level trim (-60 to +24)
+    pitch: 0                # Semitone offset (-24 to +24)
+    start: 0.0              # Start offset into the sample (0.0-1.0)
+    attack: 0.0             # Fade-in seconds
+    release: 0.05           # Fade-out seconds
+
+  - midich: 1
+    audioch: 6
+    file: samples/piano-c3.wav
+    root: c3
+    range: [c2, c5]         # Melodic: repitched across the span (must surround root)
+    voices: 8               # Polyphonic for chords / overlapping tails
+
 cv:
   - midich: 2           # MIDI channel for CV input
     audioch: 5          # Gate CV on channel 5, Pitch CV on channel 6
@@ -109,7 +129,9 @@ es5:
 
 Each poly16 instance has 16-voice polyphony and independent ADSR/waveform
 settings. Each drum instance triggers on a specific MIDI note with
-physically-modeled synthesis. Each CV instance outputs gate CV and a
+physically-modeled synthesis. Each sampler instance plays a WAV file triggered
+by a MIDI note, optionally repitched across a note range for melodic playback.
+Each CV instance outputs gate CV and a
 configurable number of pitch CVs on consecutive audio channels for interfacing
 with modular synthesizers via DC-coupled audio interfaces (e.g., Expert Sleepers
 ES-9). Each ES-5 instance encodes up to 6 gate outputs into a stereo audio pair
@@ -158,6 +180,34 @@ Each drum type has unique physically-modeled parameters:
 - Brightness (5000-12000 Hz): Center frequency of resonant filter
 - Decay (0.01-0.3s): Amplitude decay time
 - Metallic (0.0-1.0): Resonance amount for bell-like ringing
+
+### Sampler Parameters
+
+Sampler instances play a WAV file triggered by MIDI notes — the sample-based
+counterpart to drums. WAV files are decoded to mono once at startup and resampled
+on playback, so for cleanest results run the audio device at the files' sample
+rate (a device rate below the file rate will alias).
+
+**Note mapping**: `root` (required) plays the sample at its recorded pitch. With
+an optional `range: [low, high]` — which must surround `root` — notes across the
+span are repitched by `note - root` semitones for melodic playback; without a
+range, only `root` triggers. Several instances sharing one `audioch` sum into a
+"kit" on a single output.
+
+**Voices** (1-16): Polyphony. `1` is monophonic retrigger; higher values allow
+overlapping tails and chords, with oldest-voice stealing.
+
+**Gain** (-60 to +24 dB): Per-sample level trim, since WAV files vary in level.
+
+**Pitch** (-24 to +24 semitones): Tuning offset applied on top of root/range.
+
+**Start** (0.0-1.0): Offset into the sample where playback begins.
+
+**Attack / Release** (seconds): Short fades that keep the sample edges click-free.
+Playback is one-shot — note-off is ignored and the sample plays through.
+
+The display shows the file name, a trigger/voice activity indicator, and the root
+note with its MIDI number (e.g., `c2 (36)`).
 
 ### CV Parameters
 
@@ -215,7 +265,7 @@ the corresponding channel numbers for `audioch` in your config.
 ## Controls
 
 ```
-h/l, ←/→             = Switch between instances (poly16, drums, CVs, ES-5s)
+h/l, ←/→             = Switch between instances (poly16, drums, samplers, CVs, ES-5s)
 
 j/k, ↑/↓             = Move cursor between parameters
 
