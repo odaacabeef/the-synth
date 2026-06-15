@@ -22,6 +22,9 @@ pub struct SynthConfig {
 
     #[serde(default)]
     pub es5: Vec<ES5InstanceConfig>,
+
+    #[serde(default)]
+    pub sampler: Vec<SamplerInstanceConfig>,
 }
 
 impl SynthConfig {
@@ -40,10 +43,15 @@ impl SynthConfig {
 
     /// Validate the configuration
     pub fn validate(&self) -> Result<()> {
-        // Allow empty poly16 if we have drums, CVs, or ES5s
-        if self.poly16.is_empty() && self.drums.is_empty() && self.cv.is_empty() && self.es5.is_empty() {
+        // Allow empty poly16 if we have drums, CVs, ES5s, or samplers
+        if self.poly16.is_empty()
+            && self.drums.is_empty()
+            && self.cv.is_empty()
+            && self.es5.is_empty()
+            && self.sampler.is_empty()
+        {
             return Err(anyhow!(
-                "Configuration must have at least one poly16, drum, CV, or ES5 instance"
+                "Configuration must have at least one poly16, drum, CV, ES5, or sampler instance"
             ));
         }
 
@@ -66,6 +74,12 @@ impl SynthConfig {
         for (idx, es5) in self.es5.iter().enumerate() {
             es5.validate()
                 .with_context(|| format!("Invalid configuration for ES5 instance {}", idx))?;
+        }
+
+        for (idx, sampler) in self.sampler.iter().enumerate() {
+            sampler
+                .validate()
+                .with_context(|| format!("Invalid configuration for sampler instance {}", idx))?;
         }
 
         Ok(())
@@ -482,6 +496,138 @@ impl ES5InstanceConfig {
     }
 }
 
+/// Sampler instance configuration - plays a WAV file triggered by MIDI notes
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SamplerInstanceConfig {
+    pub midich: MidiChannelSpec,
+    pub audioch: usize,
+
+    /// Path to the WAV file (resolved relative to the config file's directory)
+    pub file: String,
+
+    /// Note that plays the sample at its recorded pitch (e.g. "c3")
+    pub root: String,
+
+    /// Optional [low, high] note span for melodic playback; must surround root.
+    /// When omitted, only `root` triggers the sample.
+    #[serde(default)]
+    pub range: Option<Vec<String>>,
+
+    #[serde(default = "default_sampler_voices")]
+    pub voices: usize,
+
+    #[serde(default = "default_sampler_gain")]
+    pub gain: f32, // dB trim
+
+    #[serde(default = "default_sampler_pitch")]
+    pub pitch: i8, // semitone offset
+
+    #[serde(default = "default_sampler_start")]
+    pub start: f32, // 0..1 offset into the sample
+
+    #[serde(default = "default_sampler_attack")]
+    pub attack: f32, // fade-in seconds
+
+    #[serde(default = "default_sampler_release")]
+    pub release: f32, // fade-out seconds
+}
+
+impl SamplerInstanceConfig {
+    /// Validate this sampler instance configuration
+    pub fn validate(&self) -> Result<()> {
+        // Validate MIDI channel (1-16)
+        match &self.midich {
+            MidiChannelSpec::Channel(ch) => {
+                if *ch < 1 || *ch > 16 {
+                    return Err(anyhow!("MIDI channel must be between 1 and 16"));
+                }
+            }
+            MidiChannelSpec::Omni(_) => {}
+        }
+
+        // Validate audio channel (1-indexed, must be >= 1)
+        if self.audioch < 1 {
+            return Err(anyhow!("Audio channel must be >= 1 (channels are 1-indexed)"));
+        }
+
+        // Root note must parse
+        let root = parse_note_str(&self.root).context("Invalid sampler root note")?;
+
+        // Range, if present, must be two parseable notes that surround root
+        if let Some(range) = &self.range {
+            if range.len() != 2 {
+                return Err(anyhow!(
+                    "Sampler range must have exactly two notes: [low, high]"
+                ));
+            }
+            let lo = parse_note_str(&range[0]).context("Invalid sampler range low note")?;
+            let hi = parse_note_str(&range[1]).context("Invalid sampler range high note")?;
+            if lo > hi {
+                return Err(anyhow!("Sampler range low note must be <= high note"));
+            }
+            if root < lo || root > hi {
+                return Err(anyhow!("Sampler range must surround root note"));
+            }
+        }
+
+        if self.voices < 1 || self.voices > 16 {
+            return Err(anyhow!("Sampler voices must be between 1 and 16"));
+        }
+        if self.gain < -60.0 || self.gain > 24.0 {
+            return Err(anyhow!("Sampler gain must be between -60 and +24 dB"));
+        }
+        if self.pitch < -24 || self.pitch > 24 {
+            return Err(anyhow!("Sampler pitch must be between -24 and +24 semitones"));
+        }
+        if self.start < 0.0 || self.start > 1.0 {
+            return Err(anyhow!("Sampler start must be between 0.0 and 1.0"));
+        }
+        if self.attack < 0.0 || self.attack > 10.0 {
+            return Err(anyhow!("Sampler attack must be between 0.0 and 10.0 seconds"));
+        }
+        if self.release < 0.0 || self.release > 10.0 {
+            return Err(anyhow!("Sampler release must be between 0.0 and 10.0 seconds"));
+        }
+
+        Ok(())
+    }
+
+    /// Get the 0-indexed audio channel for internal use
+    pub fn audio_channel_index(&self) -> usize {
+        self.audioch.saturating_sub(1)
+    }
+
+    /// Get the MIDI channel filter value (0-15 for specific channel, 255 for omni)
+    pub fn midi_channel_filter(&self) -> u8 {
+        match &self.midich {
+            MidiChannelSpec::Channel(ch) => ch - 1,
+            MidiChannelSpec::Omni(_) => 255,
+        }
+    }
+
+    /// Parse the root note string to a MIDI note number
+    pub fn parse_root(&self) -> Result<u8> {
+        parse_note_str(&self.root)
+    }
+
+    /// Parse the optional range to (low, high) MIDI note numbers
+    pub fn parse_range(&self) -> Result<Option<(u8, u8)>> {
+        match &self.range {
+            None => Ok(None),
+            Some(range) => {
+                if range.len() != 2 {
+                    return Err(anyhow!(
+                        "Sampler range must have exactly two notes: [low, high]"
+                    ));
+                }
+                let lo = parse_note_str(&range[0])?;
+                let hi = parse_note_str(&range[1])?;
+                Ok(Some((lo, hi)))
+            }
+        }
+    }
+}
+
 /// MIDI channel specification - either a specific channel (1-16) or omni
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
@@ -576,6 +722,31 @@ fn default_hat_decay() -> f32 {
 
 fn default_hat_metallic() -> f32 {
     0.4
+}
+
+// Sampler defaults
+fn default_sampler_voices() -> usize {
+    1
+}
+
+fn default_sampler_gain() -> f32 {
+    0.0
+}
+
+fn default_sampler_pitch() -> i8 {
+    0
+}
+
+fn default_sampler_start() -> f32 {
+    0.0
+}
+
+fn default_sampler_attack() -> f32 {
+    0.0
+}
+
+fn default_sampler_release() -> f32 {
+    0.05
 }
 
 // CV defaults
@@ -677,6 +848,78 @@ poly16:
 
         let config: SynthConfig = serde_yaml::from_str(yaml).unwrap();
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_parse_sampler_config() {
+        let yaml = r#"
+devices:
+  midiin: "test-midi"
+  audioout: "test-audio"
+
+sampler:
+  - file: "kick.wav"
+    midich: 10
+    audioch: 3
+    root: "c2"
+  - file: "piano.wav"
+    midich: 1
+    audioch: 4
+    root: "c3"
+    range: ["c2", "c5"]
+    voices: 8
+    gain: -3.0
+"#;
+        let config: SynthConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(config.validate().is_ok());
+        assert_eq!(config.sampler.len(), 2);
+        assert_eq!(config.sampler[0].voices, 1); // default
+        assert!(config.sampler[0].range.is_none());
+        assert_eq!(config.sampler[1].voices, 8);
+        assert_eq!(config.sampler[1].parse_range().unwrap(), Some((36, 72)));
+    }
+
+    #[test]
+    fn test_sampler_range_must_surround_root() {
+        let yaml = r#"
+devices:
+  midiin: "test-midi"
+  audioout: "test-audio"
+
+sampler:
+  - file: "x.wav"
+    midich: 1
+    audioch: 1
+    root: "c5"
+    range: ["c2", "c4"]
+"#;
+        let config: SynthConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(config.validate().is_err()); // root c5 is above range c2..c4
+    }
+
+    #[test]
+    fn test_sampler_defaults() {
+        let yaml = r#"
+devices:
+  midiin: "test-midi"
+  audioout: "test-audio"
+
+sampler:
+  - file: "x.wav"
+    midich: 1
+    audioch: 1
+    root: "c3"
+"#;
+        let config: SynthConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(config.validate().is_ok());
+        let s = &config.sampler[0];
+        assert_eq!(s.voices, 1);
+        assert_eq!(s.gain, 0.0);
+        assert_eq!(s.pitch, 0);
+        assert_eq!(s.start, 0.0);
+        assert_eq!(s.attack, 0.0);
+        assert_eq!(s.release, 0.05);
+        assert_eq!(s.parse_root().unwrap(), 48); // c3 = 48
     }
 
     #[test]
