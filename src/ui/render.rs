@@ -33,65 +33,87 @@ fn render_multi_instance(frame: &mut Frame, app: &App) {
         return;
     }
 
-    // Build all lines by rendering instances horizontally
-    let max_lines = 20; // Enough for header + parameters + voices
-    let mut combined_lines: Vec<String> = vec![String::new(); max_lines];
-
-    // Find the index where drums start (for divider placement)
-    let first_drum_idx = app.multi_instances.iter().position(|inst| {
-        matches!(inst, MultiInstance::Drum { .. })
-    });
-
-    // Find the index where samplers start (for divider placement)
-    let first_sampler_idx = app.multi_instances.iter().position(|inst| {
-        matches!(inst, MultiInstance::Sampler { .. })
-    });
-
-    for (idx, instance) in app.multi_instances.iter().enumerate() {
-        let is_selected = idx == app.current_instance;
-        let instance_lines = build_instance_lines(
-            instance,
-            is_selected,
-            app.selected_param,
-            app.selected_drum_param,
-            app.selected_cv_param,
-            app.selected_sampler_param,
-        );
-
-        // Determine spacing: add divider before the first drum and first sampler
-        let spacing = if idx == 0 {
-            ""
-        } else if Some(idx) == first_drum_idx || Some(idx) == first_sampler_idx {
-            "  :" // Divider before the drums / sampler groups (2 spaces + :)
-        } else {
-            " " // Regular spacing
-        };
-
-        // Merge instance lines horizontally
-        for (line_idx, line) in instance_lines.iter().enumerate() {
-            if line_idx < max_lines {
-                combined_lines[line_idx].push_str(spacing);
-                combined_lines[line_idx].push_str(line);
-            }
-        }
-    }
-
-    // Remove trailing empty lines (including lines with only whitespace and divider)
-    while combined_lines.last().map_or(false, |line| {
-        let trimmed = line.trim();
-        trimmed.is_empty() || trimmed == ":"
-    }) {
-        combined_lines.pop();
-    }
-
     // Convert to ratatui Lines and render
-    let lines: Vec<Line> = combined_lines
+    let lines: Vec<Line> = build_screen_lines(app, 20)
         .into_iter()
         .map(|s| Line::from(s))
         .collect();
 
     let paragraph = Paragraph::new(lines);
     frame.render_widget(paragraph, frame.size());
+}
+
+/// Assemble the full multi-instance screen as plain text rows.
+///
+/// Each instance is rendered to a fixed-width, fixed-height column block; the
+/// blocks are concatenated side by side with ":" dividers before the first
+/// drum and first sampler groups.
+fn build_screen_lines(app: &App, max_lines: usize) -> Vec<String> {
+    // A ":" divider is drawn before the first drum and the first sampler,
+    // separating those groups from the instruments to their left.
+    let first_drum_idx = app
+        .multi_instances
+        .iter()
+        .position(|inst| matches!(inst, MultiInstance::Drum { .. }));
+    let first_sampler_idx = app
+        .multi_instances
+        .iter()
+        .position(|inst| matches!(inst, MultiInstance::Sampler { .. }));
+
+    // Build each instance's column block, plus whether a divider precedes it.
+    let mut blocks: Vec<Vec<String>> = Vec::with_capacity(app.multi_instances.len());
+    let mut divider_before: Vec<bool> = Vec::with_capacity(app.multi_instances.len());
+    for (idx, instance) in app.multi_instances.iter().enumerate() {
+        let is_selected = idx == app.current_instance;
+        blocks.push(build_instance_lines(
+            instance,
+            is_selected,
+            app.selected_param,
+            app.selected_drum_param,
+            app.selected_cv_param,
+            app.selected_sampler_param,
+        ));
+        divider_before.push(Some(idx) == first_drum_idx || Some(idx) == first_sampler_idx);
+    }
+
+    combine_columns(&blocks, &divider_before, max_lines)
+}
+
+/// Merge per-instance column blocks into horizontal rows.
+///
+/// Each block is already a fixed-width column (every instance builder pads its
+/// lines to a common width and the same number of rows), so concatenating row
+/// by row yields a rectangular layout with vertically-aligned dividers. A "  :"
+/// divider is inserted before any instance flagged in `divider_before` (except
+/// the first, which never has a leading divider). Trailing rows that carry only
+/// spacing and dividers are trimmed.
+fn combine_columns(blocks: &[Vec<String>], divider_before: &[bool], max_lines: usize) -> Vec<String> {
+    let mut combined: Vec<String> = vec![String::new(); max_lines];
+
+    for (i, block) in blocks.iter().enumerate() {
+        let spacing = if i == 0 {
+            ""
+        } else if divider_before.get(i).copied().unwrap_or(false) {
+            "  :"
+        } else {
+            " "
+        };
+        for (line_idx, line) in block.iter().enumerate() {
+            if line_idx < max_lines {
+                combined[line_idx].push_str(spacing);
+                combined[line_idx].push_str(line);
+            }
+        }
+    }
+
+    while combined
+        .last()
+        .map_or(false, |line| line.chars().all(|c| c == ' ' || c == ':'))
+    {
+        combined.pop();
+    }
+
+    combined
 }
 
 /// Build lines for a single instrument instance (synth, drum, or CV)
@@ -224,6 +246,11 @@ fn build_synth_lines(
             }
         }
         lines.push(voice_line);
+    }
+
+    // Pad to match other instruments (16 lines total) so dividers align
+    while lines.len() < 16 {
+        lines.push(String::new());
     }
 
     pad_lines(&mut lines);
@@ -519,7 +546,6 @@ fn build_sampler_lines(
     }
 
     lines.push(String::new()); // Blank line
-    lines.push(String::new()); // Blank line
 
     // Sample name (no prefix): wrapped onto up to NAME_ROWS lines, then
     // truncated with a trailing "..." so long names can't widen the instance.
@@ -648,9 +674,9 @@ mod tests {
         // The old "smp:" prefix is gone.
         assert!(lines.iter().all(|l| !l.contains("smp:")));
         // Short name on the first name row, blank second row, mapping below.
-        assert_eq!(lines[12].trim(), "short");
-        assert_eq!(lines[13].trim(), "");
-        assert_eq!(lines[14].trim(), "c2");
+        assert_eq!(lines[11].trim(), "short");
+        assert_eq!(lines[12].trim(), "");
+        assert_eq!(lines[13].trim(), "c2");
     }
 
     #[test]
@@ -660,8 +686,8 @@ mod tests {
         let config = sampler_config(&format!("samples/{}.wav", long), None);
         let lines = build_sampler_lines(&config, &[None; 16], None, false, SamplerParameter::Gain);
 
-        let row1: String = lines[12].trim().to_string();
-        let row2: String = lines[13].trim().to_string();
+        let row1: String = lines[11].trim().to_string();
+        let row2: String = lines[12].trim().to_string();
         assert_eq!(row1.chars().count(), 16);
         assert_eq!(row2.chars().count(), 16);
         let combined = format!("{}{}", row1, row2);
@@ -676,6 +702,94 @@ mod tests {
             Some(vec!["c2".to_string(), "c5".to_string()]),
         );
         let lines = build_sampler_lines(&config, &[None; 16], None, false, SamplerParameter::Gain);
-        assert_eq!(lines[14].trim(), "c2 c2-c5");
+        assert_eq!(lines[13].trim(), "c2 c2-c5");
+    }
+
+    #[test]
+    fn test_combine_columns_rectangular_no_detached_divider() {
+        // Three columns of equal height but differing widths, with dividers
+        // before the 2nd and 3rd (mimicking poly | drums | sampler). The last
+        // row is blank in every column so it should be trimmed away.
+        let blocks = vec![
+            vec!["aa".into(), "aa".into(), "  ".into()],
+            vec!["bbb".into(), "   ".into(), "   ".into()],
+            vec!["c".into(), "c".into(), " ".into()],
+        ];
+        let divider_before = vec![false, true, true];
+
+        let lines = combine_columns(&blocks, &divider_before, 20);
+
+        // Trailing all-blank/divider row trimmed (3 rows -> 2).
+        assert_eq!(lines.len(), 2);
+        // Rectangular: every row is the same width.
+        let w = lines[0].len();
+        assert!(lines.iter().all(|l| l.len() == w), "rows must be equal width");
+        // No row starts with a detached leading divider.
+        assert!(lines.iter().all(|l| !l.starts_with("  :")), "no detached divider");
+    }
+
+    #[test]
+    fn test_combine_columns_trims_multi_divider_blank_rows() {
+        // A trailing row carrying only spacing and *two* dividers must trim.
+        let blocks = vec![
+            vec!["x".into(), " ".into()],
+            vec!["y".into(), " ".into()],
+            vec!["z".into(), " ".into()],
+        ];
+        let divider_before = vec![false, true, true];
+
+        let lines = combine_columns(&blocks, &divider_before, 20);
+        assert_eq!(lines.len(), 1, "row of only spaces and ':' dividers must be trimmed");
+    }
+
+    fn synth_config(midich: u8, audioch: usize) -> crate::config::SynthInstanceConfig {
+        crate::config::SynthInstanceConfig {
+            name: "x".to_string(),
+            midich: crate::config::MidiChannelSpec::Channel(midich),
+            audioch,
+            attack: 0.01,
+            decay: 0.1,
+            sustain: 0.5,
+            release: 0.1,
+            wave: crate::config::WaveformSpec::Sine,
+        }
+    }
+
+    #[test]
+    fn test_screen_lines_synths_then_samplers_aligned() {
+        use crate::instruments::poly16::SynthParameters;
+        use crate::instruments::sampler::SamplerParameters;
+        use std::sync::Arc;
+
+        // Two synths (shorter panels) to the left of two samplers - the layout
+        // that exposed detached dividers before synth panels were height-padded.
+        let app = App::new_multi_instance(
+            vec![Arc::new(SynthParameters::default()), Arc::new(SynthParameters::default())],
+            vec![synth_config(2, 2), synth_config(3, 3)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![Arc::new(SamplerParameters::new()), Arc::new(SamplerParameters::new())],
+            vec![
+                sampler_config("glitch/20260614-122419-dense.wav", None),
+                sampler_config(
+                    &format!("glitch/{}.wav", "a".repeat(40)),
+                    Some(vec!["c2".to_string(), "c5".to_string()]),
+                ),
+            ],
+        );
+
+        let lines = build_screen_lines(&app, 20);
+
+        // Rectangular block: every row is the same width.
+        let w = lines[0].len();
+        assert!(lines.iter().all(|l| l.len() == w), "rows must be equal width");
+        // No row begins with a detached divider.
+        assert!(lines.iter().all(|l| !l.starts_with("  :")), "no detached leading divider");
+        // Trailing divider-only rows trimmed; the last row carries real content.
+        let last = lines.last().unwrap();
+        assert!(last.chars().any(|c| c != ' ' && c != ':'), "last row should carry content");
     }
 }
